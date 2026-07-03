@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>宇宙轨道图鉴 · 太阳系</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- importmap：零构建，从 CDN 加载 Three.js（含 addons） -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <!-- 3D 场景挂载点 -->
+  <div id="scene"></div>
+
+  <!-- 顶部标题 + 模式切换 -->
+  <header id="topbar">
+    <h1>🌌 宇宙轨道图鉴</h1>
+    <span class="subtitle">真实天文数据驱动</span>
+    <div class="tabs">
+      <button id="tabSolar" class="active">太阳系</button>
+      <button id="tabStars">邻近恒星</button>
+    </div>
+  </header>
+
+  <!-- 左下：控制面板 -->
+  <div id="controls">
+    <div id="timeControls">
+      <div class="row date-row">
+        <span class="label-sm">模拟时间</span>
+        <strong id="dateLabel">—</strong>
+      </div>
+      <div class="row">
+        <button id="playBtn">⏸ 暂停</button>
+        <button id="nowBtn">↺ 回到今天</button>
+      </div>
+      <div class="row">
+        <span class="label-sm">流速</span>
+        <input type="range" id="speed" min="-200" max="200" step="1" value="5" />
+        <span id="speedLabel" class="label-sm">5 天 / 秒</span>
+      </div>
+      <div class="row">
+        <label class="checkbox"><input type="checkbox" id="orbitsToggle" checked /> 显示轨道线</label>
+        <button id="eventsBtn" class="mini-btn">🔭 天象预测</button>
+      </div>
+    </div>
+    <div class="row body-list" id="bodyList"></div>
+  </div>
+
+  <!-- 右侧：天体信息面板 -->
+  <aside id="info"></aside>
+
+  <!-- 天象预测面板 -->
+  <aside id="eventsPanel">
+    <div class="ev-head">
+      <h2>🔭 未来 8 年天象预测</h2>
+      <button id="eventsClose">✕</button>
+    </div>
+    <p class="ev-note">由真实轨道数据算出 · 点击可跳转到该日期</p>
+    <ul id="eventsList"></ul>
+  </aside>
+
+  <!-- 底部提示 -->
+  <div id="hint">🖱 拖动旋转 · 滚轮缩放 · 点击天体查看特征</div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
