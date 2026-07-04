@@ -1,171 +1,252 @@
 // ============================================================================
-//  stars.js — 邻近与著名恒星数据（真实天球坐标）
+//  stars.js — data for nearby and famous stars (real celestial coordinates)
 // ----------------------------------------------------------------------------
-//  每颗恒星用真实的赤经(RA)、赤纬(Dec)、距离(光年)定位，
-//  在以太阳为中心的 3D 星图中还原它们的真实空间分布。
-//  数据来源：SIMBAD / Hipparcos / Gaia 公开星表。
+//  Each star is placed by its real right ascension (RA), declination (Dec) and
+//  distance (light-years), reconstructing its true 3D position in a Sun-centered
+//  star map.
+//  Sources: SIMBAD / Hipparcos / Gaia public catalogs.
 // ============================================================================
 
-// 由光谱型首字母决定颜色（恒星表面温度：O蓝 → M红）
+// Color from the leading spectral-type letter (surface temperature: O blue → M red)
 export const SPECTRAL_COLOR = {
   O: 0x9bb0ff, B: 0xaabfff, A: 0xcad8ff, F: 0xf8f7ff,
   G: 0xfff2cc, K: 0xffcf8f, M: 0xff8a5c
 };
 
-// 光度级 → 显示尺寸（矮星小、巨星中、超巨星大）
+// Luminosity class → display size (dwarfs small, giants medium, supergiants large)
 const LUM_SIZE = { V: 0.4, IV: 0.5, III: 0.9, II: 1.4, I: 2.4 };
 
-// ra: 赤经(小时)  dec: 赤纬(度)  dist: 距离(光年)
+// ra: right ascension (hours)  dec: declination (deg)  dist: distance (light-years)
 export const STARS = [
   {
-    key: 'sun', nameZh: '太阳', nameEn: 'Sun', ra: 0, dec: 0, dist: 0,
+    key: 'sun', nameZh: 'Sun', nameEn: 'Sun', ra: 0, dec: 0, dist: 0,
     spectral: 'G2V', lum: 'V',
-    facts: { '距离': '0（我们所在）', '光谱型': 'G2V 黄矮星', '直径': '1,392,700 km' },
-    highlights: ['星图的中心参照点', '在银河系猎户臂的一个普通位置'],
-    blurb: '太阳 —— 我们的母恒星，这张邻近恒星地图的原点。'
+    facts: { 'Distance': '0 (our location)', 'Spectral type': 'G2V yellow dwarf', 'Diameter': '1,392,700 km' },
+    highlights: ['The central reference point of the map', 'An ordinary position in the Milky Way’s Orion Arm'],
+    blurb: 'The Sun — our home star and the origin point of this nearby-star map.',
+    mechanics: {
+      orbit: 'The Sun is the origin of this star map: its coordinates are exactly (0, 0, 0). Every other star is placed relative to it, from that star’s right ascension, declination and distance.',
+      gValue: 'Surface gravity g ≈ 274 m/s² (about 28 × Earth)',
+      gMethod: 'For a star, g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M = 1 M☉, R = 1 R☉ → g ≈ 274 m/s².'
+    }
   },
   {
-    key: 'proxima', nameZh: '比邻星', nameEn: 'Proxima Centauri', ra: 14.4953, dec: -62.679, dist: 4.246,
+    key: 'proxima', nameZh: 'Proxima Centauri', nameEn: 'Proxima Centauri', ra: 14.4953, dec: -62.679, dist: 4.246,
     spectral: 'M5.5Ve', lum: 'V',
-    facts: { '距离': '4.24 光年（最近的恒星）', '光谱型': 'M5.5Ve 红矮星', '所属': '半人马座 α 三星系统' },
+    facts: { 'Distance': '4.24 ly (nearest star)', 'Spectral type': 'M5.5Ve red dwarf', 'System': 'Alpha Centauri triple system' },
     highlights: [
-      '⭐ 离太阳最近的恒星',
-      '拥有位于宜居带的行星「比邻星 b」',
-      '红矮星，质量仅约太阳的 1/8，会爆发耀斑',
-      '光需 4.24 年才能到达我们'
+      '⭐ The closest star to the Sun',
+      'Hosts the planet "Proxima b" in its habitable zone',
+      'A red dwarf only ~1/8 the Sun’s mass, prone to flares',
+      'Its light takes 4.24 years to reach us'
     ],
-    blurb: '比邻星是距太阳最近的恒星，一颗昏暗的红矮星。它拥有一颗位于宜居带的行星，是人类星际探测的首要目标。'
+    blurb: 'Proxima Centauri is the nearest star to the Sun, a dim red dwarf. It hosts a planet in its habitable zone and is the prime target for interstellar exploration.',
+    mechanics: {
+      orbit: 'Placed from its catalog coordinates RA = 14.50 h, Dec = −62.68°, distance = 4.24 ly. RA (hours) and Dec (degrees) are converted to radians, then mapped to 3D by x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). Being the nearest star, it lies closest to the origin of any point on the map.',
+      gValue: 'Surface gravity g ≈ 1410 m/s² (about 144 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 0.12 M☉, R ≈ 0.15 R☉ → g ≈ 1410 m/s². A tiny, dense red dwarf packs a surprisingly strong surface gravity.'
+    }
   },
   {
-    key: 'alphacen', nameZh: '南门二', nameEn: 'Alpha Centauri A', ra: 14.6601, dec: -60.834, dist: 4.365,
+    key: 'alphacen', nameZh: 'Alpha Centauri A', nameEn: 'Alpha Centauri A', ra: 14.6601, dec: -60.834, dist: 4.365,
     spectral: 'G2V', lum: 'V',
-    facts: { '距离': '4.37 光年', '光谱型': 'G2V（与太阳几乎相同）', '所属': '半人马座 α' },
+    facts: { 'Distance': '4.37 ly', 'Spectral type': 'G2V (almost identical to the Sun)', 'System': 'Alpha Centauri' },
     highlights: [
-      '与太阳最像的邻近恒星（同为 G2V）',
-      '与南门二乙（K1V）组成双星，比邻星是其伴星',
-      '南天最亮恒星之一，肉眼可见'
+      'The nearby star most like the Sun (also G2V)',
+      'Forms a binary with Alpha Centauri B (K1V); Proxima is a distant companion',
+      'One of the brightest stars in the southern sky, visible to the naked eye'
     ],
-    blurb: '南门二 A 是离我们第二近的恒星系统的主星，性质与太阳惊人地相似，长期是科幻中星际航行的目的地。'
+    blurb: 'Alpha Centauri A is the primary star of the second-nearest star system, strikingly similar to the Sun and a long-standing destination in interstellar science fiction.',
+    mechanics: {
+      orbit: 'Placed from RA = 14.66 h, Dec = −60.83°, distance = 4.37 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). It is gravitationally bound in a triple system, so its true position drifts slowly over centuries; this map is a fixed J2000 snapshot.',
+      gValue: 'Surface gravity g ≈ 199 m/s² (about 20 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.08 M☉, R ≈ 1.22 R☉ → g ≈ 199 m/s². Sun-like, so its gravity is close to the Sun’s.'
+    }
   },
   {
-    key: 'barnard', nameZh: '巴纳德星', nameEn: "Barnard's Star", ra: 17.9633, dec: 4.693, dist: 5.963,
+    key: 'barnard', nameZh: "Barnard's Star", nameEn: "Barnard's Star", ra: 17.9633, dec: 4.693, dist: 5.963,
     spectral: 'M4.0V', lum: 'V',
-    facts: { '距离': '5.96 光年', '光谱型': 'M4V 红矮星', '特点': '自行最快的恒星' },
+    facts: { 'Distance': '5.96 ly', 'Spectral type': 'M4V red dwarf', 'Notable': 'Highest proper motion of any star' },
     highlights: [
-      '天空中「自行」最快的恒星——移动肉眼虽不可见但逐年可测',
-      '古老的红矮星，年龄可能超过 100 亿年',
-      '2024 年确认拥有行星'
+      'Moves across the sky faster than any other star ("proper motion") — invisible to the eye but measurable year to year',
+      'An ancient red dwarf, possibly over 10 billion years old',
+      'Confirmed to host a planet in 2024'
     ],
-    blurb: '巴纳德星是一颗高速掠过我们视线的古老红矮星，它在天球上的移动速度是所有已知恒星里最快的。'
+    blurb: 'Barnard’s Star is an ancient red dwarf streaking across our line of sight — its apparent motion on the sky is the fastest of any known star.',
+    mechanics: {
+      orbit: 'Placed from RA = 17.96 h, Dec = +4.69°, distance = 5.96 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). It has the largest proper motion of any star, so its RA/Dec measurably shift year to year — this position is a snapshot for the J2000 epoch.',
+      gValue: 'Surface gravity g ≈ 1210 m/s² (about 124 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 0.16 M☉, R ≈ 0.19 R☉ → g ≈ 1210 m/s².'
+    }
   },
   {
-    key: 'sirius', nameZh: '天狼星', nameEn: 'Sirius', ra: 6.7525, dec: -16.716, dist: 8.66,
+    key: 'sirius', nameZh: 'Sirius', nameEn: 'Sirius', ra: 6.7525, dec: -16.716, dist: 8.66,
     spectral: 'A1V', lum: 'V',
-    facts: { '距离': '8.66 光年', '光谱型': 'A1V', '视星等': '-1.46（全天最亮恒星）' },
+    facts: { 'Distance': '8.66 ly', 'Spectral type': 'A1V', 'Apparent magnitude': '-1.46 (brightest star in the sky)' },
     highlights: [
-      '⭐ 夜空中最亮的恒星',
-      '有一颗白矮星伴星「天狼星 B」',
-      '比太阳更热更亮更大（约 2 倍太阳质量）',
-      '古埃及用它的偕日升预测尼罗河泛滥'
+      '⭐ The brightest star in the night sky',
+      'Has a white-dwarf companion, "Sirius B"',
+      'Hotter, brighter and larger than the Sun (~2 solar masses)',
+      'Ancient Egyptians used its heliacal rising to predict the flooding of the Nile'
     ],
-    blurb: '天狼星是夜空中最耀眼的恒星，位于大犬座。它是一对双星，主星炽热明亮，伴星是一颗致密的白矮星。'
+    blurb: 'Sirius is the most brilliant star in the night sky, in Canis Major. It is a binary: a hot, bright primary and a dense white-dwarf companion.',
+    mechanics: {
+      orbit: 'Placed from RA = 6.75 h, Dec = −16.72°, distance = 8.66 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). The coordinates track the bright primary Sirius A; its white-dwarf companion Sirius B orbits too close to separate at this scale.',
+      gValue: 'Surface gravity g ≈ 193 m/s² (about 20 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 2.06 M☉, R ≈ 1.71 R☉ → g ≈ 193 m/s².'
+    }
   },
   {
-    key: 'procyon', nameZh: '南河三', nameEn: 'Procyon', ra: 7.6550, dec: 5.225, dist: 11.46,
+    key: 'procyon', nameZh: 'Procyon', nameEn: 'Procyon', ra: 7.6550, dec: 5.225, dist: 11.46,
     spectral: 'F5IV-V', lum: 'IV',
-    facts: { '距离': '11.46 光年', '光谱型': 'F5IV-V', '视星等': '0.34' },
-    highlights: ['全天第八亮星', '同样有白矮星伴星', '与天狼星、参宿四组成「冬季大三角」'],
-    blurb: '南河三是小犬座的主星，明亮而临近，是冬季夜空最好辨认的亮星之一。'
+    facts: { 'Distance': '11.46 ly', 'Spectral type': 'F5IV-V', 'Apparent magnitude': '0.34' },
+    highlights: ['The eighth-brightest star in the sky', 'Also has a white-dwarf companion', 'Forms the "Winter Triangle" with Sirius and Betelgeuse'],
+    blurb: 'Procyon is the primary star of Canis Minor, bright and nearby — one of the easiest bright stars to spot in the winter sky.',
+    mechanics: {
+      orbit: 'Placed from RA = 7.66 h, Dec = +5.23°, distance = 11.46 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 98 m/s² (about 10 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.5 M☉, R ≈ 2.05 R☉ → g ≈ 98 m/s². It is swelling into a subgiant, so its surface gravity has already dropped well below the Sun’s.'
+    }
   },
   {
-    key: 'tauceti', nameZh: '天仓五', nameEn: 'Tau Ceti', ra: 1.7344, dec: -15.937, dist: 11.9,
+    key: 'tauceti', nameZh: 'Tau Ceti', nameEn: 'Tau Ceti', ra: 1.7344, dec: -15.937, dist: 11.9,
     spectral: 'G8.5V', lum: 'V',
-    facts: { '距离': '11.9 光年', '光谱型': 'G8.5V（类太阳）', '特点': '拥有多行星系统' },
-    highlights: ['最近的单颗类太阳恒星之一', '拥有多颗行星，含可能位于宜居带者', '金属含量低，系统古老'],
-    blurb: '天仓五是一颗与太阳相似、临近而稳定的黄矮星，拥有一个多行星系统，是搜寻地外生命的重点目标。'
+    facts: { 'Distance': '11.9 ly', 'Spectral type': 'G8.5V (Sun-like)', 'Notable': 'Hosts a multi-planet system' },
+    highlights: ['One of the nearest single Sun-like stars', 'Hosts several planets, some possibly in the habitable zone', 'Metal-poor and an old system'],
+    blurb: 'Tau Ceti is a nearby, stable yellow dwarf similar to the Sun, with a multi-planet system that makes it a key target in the search for extraterrestrial life.',
+    mechanics: {
+      orbit: 'Placed from RA = 1.73 h, Dec = −15.94°, distance = 11.9 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 342 m/s² (about 35 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 0.78 M☉, R ≈ 0.79 R☉ → g ≈ 342 m/s². A slightly smaller Sun-like star, so it is a touch denser and its gravity a bit higher.'
+    }
   },
   {
-    key: 'altair', nameZh: '牛郎星', nameEn: 'Altair', ra: 19.8464, dec: 8.868, dist: 16.73,
+    key: 'altair', nameZh: 'Altair', nameEn: 'Altair', ra: 19.8464, dec: 8.868, dist: 16.73,
     spectral: 'A7V', lum: 'V',
-    facts: { '距离': '16.73 光年', '光谱型': 'A7V', '特点': '自转极快、呈扁球形' },
+    facts: { 'Distance': '16.73 ly', 'Spectral type': 'A7V', 'Notable': 'Extremely fast rotation, oblate shape' },
     highlights: [
-      '⭐「牛郎织女」中的牛郎星（天鹰座 α）',
-      '自转极快（约 9 小时一圈），被甩成明显扁球',
-      '与织女星、天津四组成「夏季大三角」'
+      '⭐ The "Cowherd" star of the Chinese legend (Alpha Aquilae)',
+      'Spins so fast (~9 hours per rotation) that it is visibly flattened',
+      'Forms the "Summer Triangle" with Vega and Deneb'
     ],
-    blurb: '牛郎星是夏夜三角的一员，自转快得把自己甩成了扁球。它与银河对岸的织女星，构成了千古流传的传说。'
+    blurb: 'Altair is a member of the Summer Triangle, spinning so fast it has flung itself into an oblate shape. With Vega across the Milky Way, it stars in a legend told for millennia.',
+    mechanics: {
+      orbit: 'Placed from RA = 19.85 h, Dec = +8.87°, distance = 16.73 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). Its extreme rotation makes it visibly oblate, so the “radius” used below is an equatorial average.',
+      gValue: 'Surface gravity g ≈ 151 m/s² (about 15 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.8 M☉, R ≈ 1.8 R☉ → g ≈ 151 m/s².'
+    }
   },
   {
-    key: 'vega', nameZh: '织女星', nameEn: 'Vega', ra: 18.6156, dec: 38.784, dist: 25.04,
+    key: 'vega', nameZh: 'Vega', nameEn: 'Vega', ra: 18.6156, dec: 38.784, dist: 25.04,
     spectral: 'A0V', lum: 'V',
-    facts: { '距离': '25.04 光年', '光谱型': 'A0V', '视星等': '0.03' },
+    facts: { 'Distance': '25.04 ly', 'Spectral type': 'A0V', 'Apparent magnitude': '0.03' },
     highlights: [
-      '⭐「牛郎织女」中的织女星（天琴座 α）',
-      '曾是天文测光的「零点」标准星',
-      '周围有尘埃盘，可能正在形成行星',
-      '约 1.2 万年后将因地轴进动成为北极星'
+      '⭐ The "Weaver Girl" star of the Chinese legend (Alpha Lyrae)',
+      'Once served as the "zero point" reference for stellar photometry',
+      'Surrounded by a dust disk that may be forming planets',
+      'Will become the pole star in about 12,000 years due to axial precession'
     ],
-    blurb: '织女星是天琴座的主星，明亮偏蓝。它是北半球夏夜最醒目的恒星之一，也曾是恒星亮度的标准参照。'
+    blurb: 'Vega is the primary star of Lyra, bright and bluish. One of the most conspicuous stars of the northern summer sky, it once served as the standard reference for stellar brightness.',
+    mechanics: {
+      orbit: 'Placed from RA = 18.62 h, Dec = +38.78°, distance = 25.04 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 105 m/s² (about 11 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 2.14 M☉, R ≈ 2.36 R☉ → g ≈ 105 m/s².'
+    }
   },
   {
-    key: 'fomalhaut', nameZh: '北落师门', nameEn: 'Fomalhaut', ra: 22.9608, dec: -29.622, dist: 25.13,
+    key: 'fomalhaut', nameZh: 'Fomalhaut', nameEn: 'Fomalhaut', ra: 22.9608, dec: -29.622, dist: 25.13,
     spectral: 'A3V', lum: 'V',
-    facts: { '距离': '25.13 光年', '光谱型': 'A3V', '特点': '拥有著名的尘埃盘' },
-    highlights: ['周围有壮观的碎屑尘埃环', '曾直接成像疑似行星', '秋季南方天空的孤星'],
-    blurb: '北落师门是南鱼座的主星，因周围一圈醒目的尘埃环而闻名，是研究行星系统形成的天然实验室。'
+    facts: { 'Distance': '25.13 ly', 'Spectral type': 'A3V', 'Notable': 'Famous for its dust disk' },
+    highlights: ['Surrounded by a spectacular debris dust ring', 'Once directly imaged with a suspected planet', 'A lone bright star in the autumn southern sky'],
+    blurb: 'Fomalhaut is the primary star of Piscis Austrinus, famed for a striking ring of dust around it — a natural laboratory for studying planetary-system formation.',
+    mechanics: {
+      orbit: 'Placed from RA = 22.96 h, Dec = −29.62°, distance = 25.13 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 155 m/s² (about 16 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.92 M☉, R ≈ 1.84 R☉ → g ≈ 155 m/s².'
+    }
   },
   {
-    key: 'pollux', nameZh: '北河三', nameEn: 'Pollux', ra: 7.7553, dec: 28.026, dist: 33.78,
+    key: 'pollux', nameZh: 'Pollux', nameEn: 'Pollux', ra: 7.7553, dec: 28.026, dist: 33.78,
     spectral: 'K0III', lum: 'III',
-    facts: { '距离': '33.78 光年', '光谱型': 'K0III 橙巨星', '特点': '最近的巨星、有行星' },
-    highlights: ['离太阳最近的巨星', '拥有一颗确认的系外行星', '双子座最亮星'],
-    blurb: '北河三是双子座的头号亮星，一颗临近的橙色巨星，也是最早确认拥有行星的巨星之一。'
+    facts: { 'Distance': '33.78 ly', 'Spectral type': 'K0III orange giant', 'Notable': 'Nearest giant star, has a planet' },
+    highlights: ['The nearest giant star to the Sun', 'Hosts a confirmed exoplanet', 'The brightest star in Gemini'],
+    blurb: 'Pollux is the brightest star in Gemini, a nearby orange giant and one of the first giant stars confirmed to host a planet.',
+    mechanics: {
+      orbit: 'Placed from RA = 7.76 h, Dec = +28.03°, distance = 33.78 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 6.8 m/s² (about 0.7 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.9 M☉, R ≈ 8.8 R☉ → g ≈ 6.8 m/s². As an orange giant it has puffed up, so despite ~2 solar masses its surface gravity is below Earth’s.'
+    }
   },
   {
-    key: 'arcturus', nameZh: '大角星', nameEn: 'Arcturus', ra: 14.2612, dec: 19.182, dist: 36.7,
+    key: 'arcturus', nameZh: 'Arcturus', nameEn: 'Arcturus', ra: 14.2612, dec: 19.182, dist: 36.7,
     spectral: 'K0III', lum: 'III',
-    facts: { '距离': '36.7 光年', '光谱型': 'K0III 橙巨星', '视星等': '-0.05' },
-    highlights: ['北天最亮恒星', '一颗年老的橙色巨星，直径约太阳 25 倍', '正高速穿越银河系（银晕族恒星）'],
-    blurb: '大角星是牧夫座的主星，北半球夜空最亮的恒星。它是一颗年老的橙巨星，正以高速穿越太阳附近的星际空间。'
+    facts: { 'Distance': '36.7 ly', 'Spectral type': 'K0III orange giant', 'Apparent magnitude': '-0.05' },
+    highlights: ['The brightest star in the northern sky', 'An old orange giant about 25× the Sun’s diameter', 'Racing through the galaxy at high speed (a halo-population star)'],
+    blurb: 'Arcturus is the primary star of Boötes and the brightest in the northern night sky. An aged orange giant, it is speeding through the interstellar space near the Sun.',
+    mechanics: {
+      orbit: 'Placed from RA = 14.26 h, Dec = +19.18°, distance = 36.7 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). It races through the solar neighborhood, so over long timescales its map position shifts noticeably.',
+      gValue: 'Surface gravity g ≈ 0.46 m/s² (about 0.05 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.08 M☉, R ≈ 25 R☉ → g ≈ 0.46 m/s². Its huge, bloated envelope leaves only a feeble surface gravity.'
+    }
   },
   {
-    key: 'aldebaran', nameZh: '毕宿五', nameEn: 'Aldebaran', ra: 4.5986, dec: 16.509, dist: 65.3,
+    key: 'aldebaran', nameZh: 'Aldebaran', nameEn: 'Aldebaran', ra: 4.5986, dec: 16.509, dist: 65.3,
     spectral: 'K5III', lum: 'III',
-    facts: { '距离': '65.3 光年', '光谱型': 'K5III 橙巨星', '特点': '金牛座「牛眼」' },
-    highlights: ['金牛座主星，宛如公牛的红色眼睛', '直径约太阳 44 倍的橙巨星', '恒星演化晚期的样本'],
-    blurb: '毕宿五是金牛座那只红色的「牛眼」，一颗膨胀中的橙色巨星，展示了类太阳恒星走向暮年的模样。'
+    facts: { 'Distance': '65.3 ly', 'Spectral type': 'K5III orange giant', 'Notable': 'The "eye of the bull" in Taurus' },
+    highlights: ['The primary star of Taurus, like the bull’s red eye', 'An orange giant about 44× the Sun’s diameter', 'A specimen of late stellar evolution'],
+    blurb: 'Aldebaran is the red "eye of the bull" in Taurus, a swelling orange giant that shows what a Sun-like star looks like heading into old age.',
+    mechanics: {
+      orbit: 'Placed from RA = 4.60 h, Dec = +16.51°, distance = 65.3 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 0.16 m/s² (about 0.017 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 1.16 M☉, R ≈ 44 R☉ → g ≈ 0.16 m/s².'
+    }
   },
   {
-    key: 'betelgeuse', nameZh: '参宿四', nameEn: 'Betelgeuse', ra: 5.9195, dec: 7.407, dist: 548,
+    key: 'betelgeuse', nameZh: 'Betelgeuse', nameEn: 'Betelgeuse', ra: 5.9195, dec: 7.407, dist: 548,
     spectral: 'M1-2Ia', lum: 'I',
-    facts: { '距离': '约 548 光年', '光谱型': 'M1-2 Ia 红超巨星', '直径': '约太阳的 700 倍' },
+    facts: { 'Distance': '~548 ly', 'Spectral type': 'M1-2 Ia red supergiant', 'Diameter': '~700× the Sun' },
     highlights: [
-      '⭐ 猎户座的红超巨星，若置于太阳位置可吞没火星轨道',
-      '亮度会不规则变化，2019 年曾神秘大幅变暗',
-      '已接近生命尽头，未来（天文尺度）将以超新星爆发',
-      '爆发时白昼可见，是最受关注的候选超新星'
+      '⭐ The red supergiant of Orion; placed at the Sun it would swallow Mars’s orbit',
+      'Brightness varies irregularly; it dimmed mysteriously and dramatically in 2019',
+      'Near the end of its life — on astronomical timescales it will explode as a supernova',
+      'When it explodes it will be visible in daylight — the most-watched supernova candidate'
     ],
-    blurb: '参宿四是猎户座肩上的红超巨星，体积大到能装下整个内太阳系。它已濒临死亡，随时可能爆发为壮观的超新星。'
+    blurb: 'Betelgeuse is the red supergiant on Orion’s shoulder, so vast it could contain the entire inner Solar System. Nearing death, it could erupt into a spectacular supernova at any time.',
+    mechanics: {
+      orbit: 'Placed from RA = 5.92 h, Dec = +7.41°, distance ≈ 548 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). Its distance is uncertain by ~20%, so its radial position on the map is the least certain of these stars.',
+      gValue: 'Surface gravity g ≈ 0.008 m/s² (about 0.0008 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 16.5 M☉, R ≈ 760 R☉ → g ≈ 0.008 m/s². A supergiant so vast its outer layers are barely bound — the surface gravity is almost negligible.'
+    }
   },
   {
-    key: 'antares', nameZh: '心宿二', nameEn: 'Antares', ra: 16.49, dec: -26.432, dist: 604,
+    key: 'antares', nameZh: 'Antares', nameEn: 'Antares', ra: 16.49, dec: -26.432, dist: 604,
     spectral: 'M1.5Iab', lum: 'I',
-    facts: { '距离': '约 604 光年', '光谱型': 'M1.5 Iab 红超巨星', '特点': '天蝎之心' },
-    highlights: ['天蝎座的红色心脏，名字意为「火星的对手」', '红超巨星，直径约太阳 700 倍', '同样是未来的超新星候选'],
-    blurb: '心宿二是天蝎座心脏处的红超巨星，颜色火红，古人称它为「火星的对手」。它与参宿四一样濒临超新星爆发。'
+    facts: { 'Distance': '~604 ly', 'Spectral type': 'M1.5 Iab red supergiant', 'Notable': 'The heart of the Scorpion' },
+    highlights: ['The red heart of Scorpius; its name means "rival of Mars"', 'A red supergiant about 700× the Sun’s diameter', 'Also a future supernova candidate'],
+    blurb: 'Antares is the red supergiant at the heart of Scorpius, fiery red in color — the ancients called it the "rival of Mars." Like Betelgeuse, it is on the brink of a supernova.',
+    mechanics: {
+      orbit: 'Placed from RA = 16.49 h, Dec = −26.43°, distance ≈ 604 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec).',
+      gValue: 'Surface gravity g ≈ 0.007 m/s² (about 0.0007 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 12 M☉, R ≈ 680 R☉ → g ≈ 0.007 m/s². Like Betelgeuse, a bloated supergiant with a vanishingly weak surface pull.'
+    }
   },
   {
-    key: 'rigel', nameZh: '参宿七', nameEn: 'Rigel', ra: 5.2422, dec: -8.202, dist: 863,
+    key: 'rigel', nameZh: 'Rigel', nameEn: 'Rigel', ra: 5.2422, dec: -8.202, dist: 863,
     spectral: 'B8Ia', lum: 'I',
-    facts: { '距离': '约 863 光年', '光谱型': 'B8 Ia 蓝超巨星', '光度': '约太阳的 12 万倍' },
-    highlights: ['猎户座最亮星，一颗炽热的蓝超巨星', '真实光度约为太阳的 12 万倍', '与红色的参宿四在猎户座遥相辉映'],
-    blurb: '参宿七是猎户座脚下炽热的蓝超巨星，真实亮度是太阳的十几万倍。它与对角的红超巨星参宿四，构成猎户座的冷暖两极。'
+    facts: { 'Distance': '~863 ly', 'Spectral type': 'B8 Ia blue supergiant', 'Luminosity': '~120,000× the Sun' },
+    highlights: ['The brightest star in Orion, a scorching blue supergiant', 'Intrinsically ~120,000× as luminous as the Sun', 'Balances the red Betelgeuse across Orion'],
+    blurb: 'Rigel is the searing blue supergiant at Orion’s foot, intrinsically tens of thousands of times brighter than the Sun. With the red supergiant Betelgeuse diagonally opposite, it forms Orion’s hot-and-cold poles.',
+    mechanics: {
+      orbit: 'Placed from RA = 5.24 h, Dec = −8.20°, distance ≈ 863 ly via x = d·cos(Dec)·cos(RA), y = d·cos(Dec)·sin(RA), z = d·sin(Dec). It is the most distant star in this map, so it defines its outer edge.',
+      gValue: 'Surface gravity g ≈ 0.9 m/s² (about 0.09 × Earth)',
+      gMethod: 'g = g☉ · (M/M☉)/(R/R☉)² with g☉ = 274 m/s². Here M ≈ 21 M☉, R ≈ 79 R☉ → g ≈ 0.9 m/s². A blue supergiant is more compact than the red supergiants, so its gravity is far higher than theirs — though still below Earth’s.'
+    }
   }
 ];
 
-// 赤道坐标(RA,Dec,dist) → 直角坐标（光年）
+// Equatorial coordinates (RA, Dec, dist) → Cartesian coordinates (light-years)
 export function starPositionLy(star) {
-  const ra = star.ra * 15 * Math.PI / 180;   // 小时 → 度 → 弧度
+  const ra = star.ra * 15 * Math.PI / 180;   // hours → degrees → radians
   const dec = star.dec * Math.PI / 180;
   return {
     x: star.dist * Math.cos(dec) * Math.cos(ra),
@@ -174,7 +255,7 @@ export function starPositionLy(star) {
   };
 }
 
-// 给恒星附上颜色与显示尺寸（供渲染层使用）
+// Attach color and display size to a star (for the render layer)
 export function starVisual(star) {
   const cls = star.spectral[0];
   const color = SPECTRAL_COLOR[cls] || 0xffffff;

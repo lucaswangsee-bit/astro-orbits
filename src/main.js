@@ -1,23 +1,51 @@
 // ============================================================================
-//  main.js — Three.js 场景、渲染循环、时间控制、双模式（太阳系 / 邻近恒星）与天象
+//  main.js — Three.js scene, render loop, time control, dual mode
+//            (Solar System / Nearby Stars) and sky events
 // ============================================================================
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 
-import { heliocentricPosition, orbitPath, moonOffset, julianDate } from './kepler.js';
-import { SUN, PLANETS, MOON } from './bodies.js';
+import {
+  heliocentricPosition, orbitPath, moonOffset, julianDate,
+  orbitalSpeeds, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S
+} from './kepler.js';
+import { SUN, PLANETS, MOON, COMETS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
 
-const SCALE = 20;        // 太阳系：每 AU 的场景单位（保持真实轨道几何）
-const STAR_SCALE = 6;    // 恒星图：每光年的场景单位
+const SCALE = 20;        // Solar System: scene units per AU (real distances)
+const SCALE_C = 26;      // Compact mode: reference scale for the √-compressed radius
+const STAR_SCALE = 6;    // Star map: scene units per light-year
 
-function toScene(p)   { return new THREE.Vector3(p.x * SCALE, p.z * SCALE, -p.y * SCALE); }
+// Distance scale morph: 0 = true distances, 1 = compact (outer planets pulled in).
+// `compress` is the animated current value; `compressTarget` is where it heads.
+let compress = 0;
+let compressTarget = 0;
+
+// Remap a heliocentric distance r (AU) to a scene radius. Compact mode uses a
+// square-root law: it spreads the crowded inner planets out and reels the far
+// outer planets (and big comet orbits) in, while keeping every orbit's shape
+// and orientation intact (the mapping is purely radial).
+function radiusScene(r) {
+  const real = r * SCALE;
+  if (compress <= 1e-4) return real;
+  const comp = Math.sqrt(r) * SCALE_C;
+  return real + (comp - real) * compress;
+}
+
+// Position → scene: scale each point radially about the Sun, then swap axes.
+function toScene(p) {
+  const r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z) || 1e-9;
+  const s = radiusScene(r) / r;
+  return new THREE.Vector3(p.x * s, p.z * s, -p.y * s);
+}
+// Direction → scene: axis swap only (NO radial remap — for velocity/tail vectors).
+function toSceneDir(v)  { return new THREE.Vector3(v.x, v.z, -v.y); }
 function toSceneLy(p) { return new THREE.Vector3(p.x * STAR_SCALE, p.z * STAR_SCALE, -p.y * STAR_SCALE); }
 
 // ---------------------------------------------------------------------------
-//  渲染器 / 场景 / 相机
+//  Renderer / scene / camera
 // ---------------------------------------------------------------------------
 const container = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ antialias: true, logarithmicDepthBuffer: true });
@@ -50,14 +78,14 @@ function loadTex(url) {
 }
 
 // ---------------------------------------------------------------------------
-//  光照
+//  Lighting
 // ---------------------------------------------------------------------------
 scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 const sunLight = new THREE.PointLight(0xffffff, 3.4, 0, 0.35);
 scene.add(sunLight);
 
 // ---------------------------------------------------------------------------
-//  银河背景（真实星空贴图，包裹整个场景）
+//  Milky Way backdrop (real star-field texture wrapping the whole scene)
 // ---------------------------------------------------------------------------
 const milkyway = new THREE.Mesh(
   new THREE.SphereGeometry(18000, 60, 40),
@@ -66,7 +94,7 @@ const milkyway = new THREE.Mesh(
 scene.add(milkyway);
 
 // ===========================================================================
-//  A) 太阳系组
+//  A) Solar System group
 // ===========================================================================
 const solarGroup = new THREE.Group();
 scene.add(solarGroup);
@@ -98,21 +126,21 @@ function makeBody(data, emissive) {
   return mesh;
 }
 
-// 太阳 + 光晕
+// Sun + glow halo
 const sunMesh = makeBody(SUN, true);
 sunMesh.add(new THREE.Mesh(
   new THREE.SphereGeometry(SUN.displaySize * 1.5, 32, 32),
   new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.13 })
 ));
 
-// 行星 + 光环
+// Planets + rings
 for (const p of PLANETS) {
   makeBody(p, false);
   if (p.rings) {
     const inner = p.displaySize * 1.4;
     const outer = p.displaySize * (p.key === 'saturn' ? 2.4 : 1.9);
     const ringGeo = new THREE.RingGeometry(inner, outer, 96);
-    // 调整 UV，让环形贴图沿半径方向映射
+    // Adjust UVs so the ring texture maps along the radial direction
     const pos = ringGeo.attributes.position, uv = ringGeo.attributes.uv, v3 = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++) {
       v3.fromBufferAttribute(pos, i);
@@ -131,7 +159,53 @@ for (const p of PLANETS) {
 }
 makeBody(MOON, false);
 
-// 轨道线
+// ---------------------------------------------------------------------------
+//  Comets — nucleus + coma glow + double tail (ion + dust), all Sun-facing.
+//  Registered in bodyMeshes/clickableBodies so click-to-select and focus work.
+// ---------------------------------------------------------------------------
+const cometRigs = [];   // { data, mesh, ionTail, dustTail, orbitLine }
+const UP_Y = new THREE.Vector3(0, 1, 0);
+for (const c of COMETS) {
+  const geo = new THREE.SphereGeometry(c.displaySize, 24, 24);
+  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: c.color }));
+  mesh.userData.body = c;
+  // Coma halo around the icy nucleus
+  mesh.add(new THREE.Mesh(
+    new THREE.SphereGeometry(c.displaySize * 2.6, 16, 16),
+    new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: 0.22, blending: THREE.AdditiveBlending, depthWrite: false })
+  ));
+  mesh.add(makeLabel(c.nameZh, 'label-comet', c.displaySize + 0.7));
+  solarGroup.add(mesh);
+  bodyMeshes[c.key] = mesh;
+  clickableBodies.push(mesh);
+
+  // Tails: unit cones (apex at the nucleus, base flaring outward), oriented each
+  // frame to stream away from the Sun. Ion = straight & blue; dust = broad & tan.
+  const makeTail = (color, width, opacity) => {
+    const t = new THREE.Mesh(
+      new THREE.ConeGeometry(1, 1, 20, 1, true),   // unit cone; scaled per-frame
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthWrite: false })
+    );
+    t.userData.width = width;
+    t.visible = false;
+    solarGroup.add(t);
+    return t;
+  };
+  const ionTail  = makeTail(0x9fd8ff, 0.18, 0.34);   // narrow, straight, blue
+  const dustTail = makeTail(0xf0dcab, 0.55, 0.16);   // broad, curved, tan
+
+  // Full elliptical orbit path (kept in AU so it can be re-mapped on scale morph)
+  const orbitPtsAU = cometOrbitPath(c);
+  const orbitLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(orbitPtsAU.map(toScene)),
+    new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.28 })
+  );
+  solarGroup.add(orbitLine);
+
+  cometRigs.push({ data: c, mesh, ionTail, dustTail, orbitLine, orbitPtsAU });
+}
+
+// Orbit lines
 const orbitLines = {};
 function buildOrbitLine(key, jd) {
   const pts = orbitPath(key, jd).map(toScene);
@@ -142,15 +216,66 @@ function buildOrbitLine(key, jd) {
 function refreshOrbits() {
   const jd = julianDate(state.simDate);
   for (const p of PLANETS) {
-    if (orbitLines[p.key]) solarGroup.remove(orbitLines[p.key]);
+    const old = orbitLines[p.key];
+    if (old) {
+      solarGroup.remove(old);
+      old.geometry.dispose();   // free GPU buffers — refreshOrbits runs on every "back to today" / event jump
+      old.material.dispose();
+    }
     orbitLines[p.key] = buildOrbitLine(p.key, jd);
     orbitLines[p.key].visible = state.showOrbits;
     solarGroup.add(orbitLines[p.key]);
   }
 }
 
+// Re-map the (static) comet orbit lines through the current scale — called each
+// frame while the compact/real distance morph is in progress.
+function rebuildCometOrbits() {
+  for (const rig of cometRigs) {
+    rig.orbitLine.geometry.setFromPoints(rig.orbitPtsAU.map(toScene));
+  }
+}
+
+// ---------------------------------------------------------------------------
+//  Kepler's 2nd law sweep sector — for the selected planet, a translucent
+//  wedge swept from the Sun over a FIXED time interval (period/10). As the
+//  planet moves the wedge changes shape but keeps (nearly) constant area.
+// ---------------------------------------------------------------------------
+const SWEEP_SEGMENTS = 40;
+const sweepGeo = new THREE.BufferGeometry();
+sweepGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array((SWEEP_SEGMENTS) * 3 * 3), 3));
+const sweepMesh = new THREE.Mesh(
+  sweepGeo,
+  new THREE.MeshBasicMaterial({ color: 0xffd873, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false })
+);
+sweepMesh.visible = false;
+solarGroup.add(sweepMesh);
+
+// Rebuild the wedge for `key` ending at the current jd
+const _sw = new THREE.Vector3();
+function updateSweep(key, jd) {
+  const { a } = orbitalSpeeds(key, jd);
+  const periodDays = 365.25 * Math.pow(a, 1.5);
+  const span = periodDays / 10;
+  const pos = sweepGeo.attributes.position;
+  let ptr = 0;
+  const arc = [];
+  for (let i = 0; i <= SWEEP_SEGMENTS; i++) {
+    const t = jd - span * (1 - i / SWEEP_SEGMENTS);
+    arc.push(toScene(heliocentricPosition(key, t)));
+  }
+  for (let i = 0; i < SWEEP_SEGMENTS; i++) {
+    // triangle: Sun (origin) — arc[i] — arc[i+1]
+    pos.array[ptr++] = 0; pos.array[ptr++] = 0; pos.array[ptr++] = 0;
+    _sw.copy(arc[i]);     pos.array[ptr++] = _sw.x; pos.array[ptr++] = _sw.y; pos.array[ptr++] = _sw.z;
+    _sw.copy(arc[i + 1]); pos.array[ptr++] = _sw.x; pos.array[ptr++] = _sw.y; pos.array[ptr++] = _sw.z;
+  }
+  pos.needsUpdate = true;
+  sweepGeo.computeVertexNormals();
+}
+
 // ===========================================================================
-//  B) 邻近恒星组
+//  B) Nearby-stars group
 // ===========================================================================
 const starsGroup = new THREE.Group();
 starsGroup.visible = false;
@@ -158,7 +283,7 @@ scene.add(starsGroup);
 
 const clickableStars = [];
 const starMeshes = {};
-const starData = STARS.map(s => ({ ...s, ...starVisual(s) })); // 附上颜色与尺寸
+const starData = STARS.map(s => ({ ...s, ...starVisual(s) })); // attach color and size
 
 for (const s of starData) {
   const geo = new THREE.SphereGeometry(s.size, 24, 24);
@@ -166,7 +291,7 @@ for (const s of starData) {
   const mesh = new THREE.Mesh(geo, mat);
   mesh.position.copy(toSceneLy(starPositionLy(s)));
   mesh.userData.star = s;
-  // 光晕
+  // Glow halo
   mesh.add(new THREE.Mesh(
     new THREE.SphereGeometry(s.size * 2.2, 16, 16),
     new THREE.MeshBasicMaterial({ color: s.color, transparent: true, opacity: 0.18 })
@@ -177,7 +302,7 @@ for (const s of starData) {
   clickableStars.push(mesh);
 }
 
-// 距离参考圈（光年）
+// Distance reference rings (light-years)
 for (const ly of [5, 10, 25, 50]) {
   const pts = [];
   for (let i = 0; i <= 128; i++) {
@@ -188,31 +313,81 @@ for (const ly of [5, 10, 25, 50]) {
     new THREE.BufferGeometry().setFromPoints(pts),
     new THREE.LineBasicMaterial({ color: 0x33507a, transparent: true, opacity: 0.35 })
   );
-  ring.add(makeLabel(`${ly} 光年`, 'label-ring', 0));
+  ring.add(makeLabel(`${ly} ly`, 'label-ring', 0));
   ring.children[0].position.set(ly * STAR_SCALE, 0, 0);
   starsGroup.add(ring);
 }
 
 // ---------------------------------------------------------------------------
-//  状态
+//  State
 // ---------------------------------------------------------------------------
 const state = {
   simDate: new Date(),
   daysPerSecond: 5,
   playing: true,
   showOrbits: true,
+  showSweep: true,
+  selectedKey: null,   // key of the currently selected body (for the sweep sector)
   mode: 'solar',   // 'solar' | 'stars'
 };
 refreshOrbits();
 
 // ---------------------------------------------------------------------------
-//  位置更新
+//  Position updates
 // ---------------------------------------------------------------------------
+const _vel = new THREE.Vector3();
+const _tailDir = new THREE.Vector3();
+const _q = new THREE.Quaternion();
 function updatePositions() {
   const jd = julianDate(state.simDate);
-  for (const p of PLANETS) bodyMeshes[p.key].position.copy(toScene(heliocentricPosition(p.key, jd)));
+  for (const p of PLANETS) {
+    const mesh = bodyMeshes[p.key];
+    mesh.position.copy(toScene(heliocentricPosition(p.key, jd)));
+  }
   const e = heliocentricPosition('earth', jd), off = moonOffset(jd), MV = 60;
   bodyMeshes.moon.position.copy(toScene({ x: e.x + off.x * MV, y: e.y + off.y * MV, z: e.z + off.z * MV }));
+
+  // Comets: position, then re-aim both tails anti-sunward (grow near perihelion)
+  for (const rig of cometRigs) {
+    const c = rig.data;
+    const p = cometPosition(c, jd);
+    const r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);   // Sun distance (AU)
+    rig.mesh.position.copy(toScene(p));
+    rig.orbitLine.visible = state.showOrbits;
+
+    // Tail length grows sharply near the Sun, fades out past ~3 AU
+    const len = Math.min(28, 3.2 / (r * r));
+    const active = len > 0.6;
+    rig.ionTail.visible = rig.dustTail.visible = active;
+    if (active) {
+      _tailDir.copy(rig.mesh.position).normalize();           // anti-sun (Sun at origin)
+      // Ion tail: straight anti-solar
+      _q.setFromUnitVectors(UP_Y, _tailDir.clone().negate());
+      placeTail(rig.ionTail, rig.mesh.position, _tailDir, len, _q);
+      // Dust tail: broader, shorter, curved slightly along the anti-velocity direction
+      const cv = cometPosition(c, jd + 0.5);
+      _vel.set(cv.x - p.x, cv.y - p.y, cv.z - p.z);
+      const antiVel = toSceneDir(_vel).normalize().multiplyScalar(-0.35);
+      _tailDir.copy(rig.mesh.position).normalize().add(antiVel).normalize();
+      _q.setFromUnitVectors(UP_Y, _tailDir.clone().negate());
+      placeTail(rig.dustTail, rig.mesh.position, _tailDir, len * 0.7, _q);
+    }
+  }
+
+  // Kepler sweep sector for the selected planet
+  const showSweep = state.showSweep && state.selectedKey && bodyMeshes[state.selectedKey]
+    && bodyMeshes[state.selectedKey].userData.body.type === 'planet';
+  sweepMesh.visible = !!showSweep;
+  if (showSweep) updateSweep(state.selectedKey, jd);
+}
+
+// Position/scale/orient a unit cone tail: apex at the nucleus, flaring outward.
+// Scale is anisotropic — long along the tail axis (Y), thin across (X/Z).
+function placeTail(tail, origin, dir, len, quat) {
+  const w = tail.userData.width * (1 + len * 0.15);   // flare a little as it lengthens
+  tail.quaternion.copy(quat);
+  tail.scale.set(w, len, w);
+  tail.position.copy(origin).addScaledVector(dir, len * 0.5);
 }
 function spinBodies(dtDays) {
   for (const key in bodyMeshes) {
@@ -222,7 +397,7 @@ function spinBodies(dtDays) {
 }
 
 // ---------------------------------------------------------------------------
-//  交互
+//  Interaction
 // ---------------------------------------------------------------------------
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
@@ -241,14 +416,14 @@ function onPointerDown(e) {
 }
 
 // ---------------------------------------------------------------------------
-//  信息面板（天体与恒星共用）
+//  Info panel (shared by bodies and stars)
 // ---------------------------------------------------------------------------
 const infoEl = document.getElementById('info');
 function typeName(obj) {
-  if (obj.spectral) return '恒星 · ' + obj.spectral;
-  return { star: '恒星', planet: '行星', moon: '卫星' }[obj.type] || obj.type;
+  if (obj.spectral) return 'Star · ' + obj.spectral;
+  return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet' }[obj.type] || obj.type;
 }
-function selectObject(obj) { showInfo(obj); focusOn(obj.key); }
+function selectObject(obj) { state.selectedKey = obj.key; showInfo(obj); focusOn(obj.key); }
 function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -260,12 +435,71 @@ function showInfo(data) {
       <span class="tag">${typeName(data)}</span></div>
     </div>
     <p class="blurb">${data.blurb}</p>
-    <h3>明显特征</h3><ul class="highlights">${highlights}</ul>
-    <h3>关键数据</h3><table class="facts">${facts}</table>`;
+    ${data.type === 'planet' ? `
+    <h3>Live physics · Vis-viva</h3>
+    <table class="facts live-physics">
+      <tr><td>Orbital speed now</td><td><span id="lpV" class="lp-val">—</span></td></tr>
+      <tr><td>Sun distance now</td><td><span id="lpR">—</span></td></tr>
+      <tr><td>At perihelion (fastest)</td><td><span id="lpVp">—</span></td></tr>
+      <tr><td>At aphelion (slowest)</td><td><span id="lpVa">—</span></td></tr>
+    </table>` : ''}
+    <h3>Notable features</h3><ul class="highlights">${highlights}</ul>
+    <h3>Key data</h3><table class="facts">${facts}</table>
+    ${data.mechanics ? `
+    <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
   infoEl.classList.add('visible');
+  const db = document.getElementById('deriveBtn');
+  if (db) db.onclick = () => openDerivation(data);
 }
 
-// 镜头对准
+// Is this object a star? (stars carry a spectral type; the Sun is a star too)
+function isStar(data) { return !!data.spectral || data.type === 'star'; }
+
+// ---------------------------------------------------------------------------
+//  Second layer: orbit / position + surface-gravity derivation (modal overlay)
+// ---------------------------------------------------------------------------
+const deriveOverlay = document.getElementById('deriveOverlay');
+function openDerivation(data) {
+  const m = data.mechanics;
+  if (!m) return;
+  const star = isStar(data);
+  document.getElementById('deriveTitle').textContent = `${data.nameZh} — derivation`;
+  document.getElementById('deriveSub').textContent = star
+    ? 'How its 3D position is mapped, and how its surface gravity is found'
+    : 'How its orbit is solved, and how its surface gravity is found';
+  document.getElementById('deriveBody').innerHTML = `
+    <div class="derive-section">
+      <h3>${star ? '3D position mapping' : 'Orbit computation'}</h3>
+      <p class="mech-note">${m.orbit}</p>
+    </div>
+    <div class="derive-section">
+      <h3>Surface gravity</h3>
+      <table class="facts">
+        <tr><td>Value</td><td class="mech-g">${m.gValue}</td></tr>
+        <tr><td>How g is found</td><td class="mech-formula">${m.gMethod}</td></tr>
+      </table>
+    </div>`;
+  deriveOverlay.classList.add('visible');
+}
+function closeDerivation() { deriveOverlay.classList.remove('visible'); }
+deriveOverlay.addEventListener('click', e => { if (e.target === deriveOverlay) closeDerivation(); });
+document.getElementById('deriveClose').onclick = closeDerivation;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDerivation(); });
+
+// Live vis-viva readout, refreshed each frame while a planet is selected
+function updateLivePhysics(jd) {
+  const k = state.selectedKey;
+  if (!k || !bodyMeshes[k] || bodyMeshes[k].userData.body.type !== 'planet') return;
+  const el = document.getElementById('lpV');
+  if (!el) return;
+  const s = orbitalSpeeds(k, jd);
+  el.textContent = (s.v * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
+  document.getElementById('lpR').textContent  = s.r.toFixed(3) + ' AU';
+  document.getElementById('lpVp').textContent = (s.vPeri * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
+  document.getElementById('lpVa').textContent = (s.vAph * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
+}
+
+// Camera focus
 let focusTarget = null;
 function focusOn(key) {
   const map = state.mode === 'solar' ? bodyMeshes : starMeshes;
@@ -273,7 +507,7 @@ function focusOn(key) {
 }
 
 // ---------------------------------------------------------------------------
-//  UI 绑定
+//  UI bindings
 // ---------------------------------------------------------------------------
 const dateLabel = document.getElementById('dateLabel');
 const speedLabel = document.getElementById('speedLabel');
@@ -282,21 +516,24 @@ const playBtn = document.getElementById('playBtn');
 const timeControls = document.getElementById('timeControls');
 const bodyListEl = document.getElementById('bodyList');
 
-const fmtDate = d => d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
-const updateSpeedLabel = () => speedLabel.textContent = `${state.daysPerSecond} 天 / 秒`;
+const fmtDate = d => d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+const updateSpeedLabel = () => speedLabel.textContent = `${state.daysPerSecond} days / sec`;
 
 speedSlider.addEventListener('input', () => { state.daysPerSecond = +speedSlider.value; updateSpeedLabel(); });
-playBtn.addEventListener('click', () => { state.playing = !state.playing; playBtn.textContent = state.playing ? '⏸ 暂停' : '▶ 播放'; });
+playBtn.addEventListener('click', () => { state.playing = !state.playing; playBtn.textContent = state.playing ? '⏸ Pause' : '▶ Play'; });
 document.getElementById('nowBtn').addEventListener('click', () => { state.simDate = new Date(); refreshOrbits(); });
 document.getElementById('orbitsToggle').addEventListener('change', e => {
   state.showOrbits = e.target.checked;
   for (const k in orbitLines) orbitLines[k].visible = state.showOrbits;
+  for (const rig of cometRigs) rig.orbitLine.visible = state.showOrbits;
 });
+document.getElementById('sweepToggle').addEventListener('change', e => { state.showSweep = e.target.checked; });
+document.getElementById('compactToggle').addEventListener('change', e => { compressTarget = e.target.checked ? 1 : 0; });
 
-// 天体 / 恒星快捷芯片（随模式重建）
+// Quick-select chips for bodies / stars (rebuilt on mode switch)
 function rebuildChips() {
   bodyListEl.innerHTML = '';
-  const list = state.mode === 'solar' ? [SUN, ...PLANETS, MOON] : starData;
+  const list = state.mode === 'solar' ? [SUN, ...PLANETS, MOON, ...COMETS] : starData;
   for (const b of list) {
     const color = (b.color || 0xffffff).toString(16).padStart(6, '0');
     const btn = document.createElement('button');
@@ -307,7 +544,7 @@ function rebuildChips() {
   }
 }
 
-// 模式切换
+// Mode switching
 const tabSolar = document.getElementById('tabSolar');
 const tabStars = document.getElementById('tabStars');
 function setMode(m) {
@@ -318,6 +555,7 @@ function setMode(m) {
   tabSolar.classList.toggle('active', m === 'solar');
   tabStars.classList.toggle('active', m === 'stars');
   focusTarget = null;
+  state.selectedKey = null;
   controls.target.set(0, 0, 0);
   camera.position.set(0, m === 'solar' ? 120 : 260, m === 'solar' ? 260 : 620);
   rebuildChips();
@@ -327,7 +565,7 @@ tabSolar.onclick = () => setMode('solar');
 tabStars.onclick = () => setMode('stars');
 
 // ---------------------------------------------------------------------------
-//  天象面板（延迟计算）
+//  Sky-events panel (computed lazily)
 // ---------------------------------------------------------------------------
 const eventsBtn = document.getElementById('eventsBtn');
 const eventsPanel = document.getElementById('eventsPanel');
@@ -349,7 +587,7 @@ function buildEvents() {
       const t = +li.dataset.t;
       if (state.mode !== 'solar') setMode('solar');
       state.simDate = new Date(t);
-      state.playing = false; playBtn.textContent = '▶ 播放';
+      state.playing = false; playBtn.textContent = '▶ Play';
       refreshOrbits();
     };
   });
@@ -366,7 +604,19 @@ rebuildChips();
 showInfo(SUN);
 
 // ---------------------------------------------------------------------------
-//  渲染循环
+//  Landing / main interface — cover screen shown before entering the app
+// ---------------------------------------------------------------------------
+const landing = document.getElementById('landing');
+function enterApp(mode) {
+  setMode(mode);
+  landing.classList.add('hidden');
+  setTimeout(() => { landing.style.display = 'none'; }, 800); // remove after fade-out
+}
+document.getElementById('enterSolar').onclick = () => enterApp('solar');
+document.getElementById('enterStars').onclick = () => enterApp('stars');
+
+// ---------------------------------------------------------------------------
+//  Render loop
 // ---------------------------------------------------------------------------
 let lastT = performance.now();
 function animate() {
@@ -379,8 +629,19 @@ function animate() {
       state.simDate = new Date(state.simDate.getTime() + dtDays * 86400000);
       spinBodies(dtDays);
     }
+    // Animate the real ↔ compact distance morph (rebuild the static orbit lines
+    // each frame while it is in progress; body positions follow automatically)
+    if (compress !== compressTarget) {
+      const step = realDt / 0.7;   // ~0.7 s transition
+      compress = compress < compressTarget
+        ? Math.min(compressTarget, compress + step)
+        : Math.max(compressTarget, compress - step);
+      refreshOrbits();
+      rebuildCometOrbits();
+    }
     dateLabel.textContent = fmtDate(state.simDate);
     updatePositions();
+    updateLivePhysics(julianDate(state.simDate));
   }
 
   if (focusTarget) {

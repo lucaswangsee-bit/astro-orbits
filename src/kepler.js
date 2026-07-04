@@ -1,23 +1,30 @@
 // ============================================================================
-//  kepler.js — 开普勒轨道根数与位置解算（真实天文数据引擎）
+//  kepler.js — Keplerian orbital elements and position solver (real astronomy engine)
 // ----------------------------------------------------------------------------
-//  数据来源：NASA JPL — "Keplerian Elements for Approximate Positions of the
-//            Major Planets"（E. M. Standish, Solar System Dynamics Group）
-//            https://ssd.jpl.nasa.gov/planets/approx_pos.html
-//  适用区间：1800 AD – 2050 AD（此区间内精度较高）
-//  参考系  ：J2000 黄道坐标系，日心
+//  Source : NASA JPL — "Keplerian Elements for Approximate Positions of the
+//           Major Planets" (E. M. Standish, Solar System Dynamics Group)
+//           https://ssd.jpl.nasa.gov/planets/approx_pos.html
+//  Valid range: 1800 AD – 2050 AD (higher accuracy within this window)
+//  Reference frame: J2000 ecliptic, heliocentric
 // ============================================================================
 
 const DEG = Math.PI / 180;
 
-// 每颗行星的 6 个轨道根数及其"每儒略世纪"的线性变化率：
-//   a    半长轴        (AU)
-//   e    离心率        (无量纲)
-//   I    轨道倾角      (°)
-//   L    平黄经        (°)
-//   peri 近日点黄经 ϖ  (°)
-//   node 升交点黄经 Ω  (°)
-// 格式：[初始值(J2000), 每世纪变化率]
+// Physical constants for the dynamics layer (velocities, vis-viva, energy)
+//   GM_SUN : heliocentric gravitational parameter, in AU³ / day²
+//            = k² where k = 0.01720209895 is the Gaussian gravitational constant
+//   AU_DAY_TO_KM_S : convert a speed in AU/day to km/s
+export const GM_SUN = 2.959122082855911e-4;   // AU³ / day²
+export const AU_DAY_TO_KM_S = 1731.456837;    // 1 AU/day = 149597870.7 km / 86400 s
+
+// The 6 orbital elements per planet and their linear rate of change "per Julian century":
+//   a    semi-major axis          (AU)
+//   e    eccentricity             (dimensionless)
+//   I    inclination              (°)
+//   L    mean longitude           (°)
+//   peri longitude of perihelion ϖ (°)
+//   node longitude of ascending node Ω (°)
+// Format: [initial value (J2000), rate of change per century]
 export const ELEMENTS = {
   mercury: {
     a:[0.38709927,  0.00000037], e:[0.20563593,  0.00001906], I:[7.00497902, -0.00594749],
@@ -54,20 +61,20 @@ export const ELEMENTS = {
 };
 
 // ---------------------------------------------------------------------------
-//  JS Date → 儒略日 (Julian Date)
-//  Unix 毫秒时间戳基准 1970-01-01 = JD 2440587.5
+//  JS Date → Julian Date
+//  Unix ms-timestamp epoch 1970-01-01 = JD 2440587.5
 // ---------------------------------------------------------------------------
 export function julianDate(date) {
   return date.getTime() / 86400000 + 2440587.5;
 }
 
-// 归一化角度到 [-π, π]
+// Normalize an angle to [-π, π]
 function normalize(angle) {
   return ((angle + Math.PI) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI) - Math.PI;
 }
 
 // ---------------------------------------------------------------------------
-//  牛顿迭代解开普勒方程：M = E - e·sin(E)，求偏近点角 E
+//  Solve Kepler's equation by Newton iteration: M = E - e·sin(E), for eccentric anomaly E
 // ---------------------------------------------------------------------------
 function solveKepler(M, e) {
   let E = M + e * Math.sin(M);
@@ -79,7 +86,7 @@ function solveKepler(M, e) {
   return E;
 }
 
-// 由某时刻 T（儒略世纪）解出瞬时轨道根数
+// Solve the instantaneous orbital elements at time T (Julian centuries)
 function elementsAt(key, T) {
   const el = ELEMENTS[key];
   return {
@@ -92,7 +99,7 @@ function elementsAt(key, T) {
   };
 }
 
-// 把轨道平面内坐标 (xp, yp) 旋转到 J2000 黄道坐标 (x, y, z)
+// Rotate in-orbit-plane coordinates (xp, yp) to J2000 ecliptic coordinates (x, y, z)
 function orbitalToEcliptic(xp, yp, node, omega, I) {
   const cosO = Math.cos(node), sinO = Math.sin(node);
   const cosw = Math.cos(omega), sinw = Math.sin(omega);
@@ -105,23 +112,24 @@ function orbitalToEcliptic(xp, yp, node, omega, I) {
 }
 
 // ---------------------------------------------------------------------------
-//  某时刻某行星的日心黄道坐标（单位：AU）
+//  Heliocentric ecliptic coordinates of a planet at a given time (units: AU)
 // ---------------------------------------------------------------------------
 export function heliocentricPosition(key, jd) {
-  const T = (jd - 2451545.0) / 36525;          // J2000 起算的儒略世纪
+  const T = (jd - 2451545.0) / 36525;          // Julian centuries since J2000
   const { a, e, I, L, peri, node } = elementsAt(key, T);
-  const omega = peri - node;                   // 近日点角距 ω
-  const M = normalize(L - peri);               // 平近点角
-  const E = solveKepler(M, e);                 // 偏近点角
-  // 轨道平面内坐标
+  const omega = peri - node;                   // argument of perihelion ω
+  const M = normalize(L - peri);               // mean anomaly
+  const E = solveKepler(M, e);                 // eccentric anomaly
+  // In-orbit-plane coordinates
   const xp = a * (Math.cos(E) - e);
   const yp = a * Math.sqrt(1 - e * e) * Math.sin(E);
   return orbitalToEcliptic(xp, yp, node, omega, I);
 }
 
 // ---------------------------------------------------------------------------
-//  生成整条轨道的采样点（用于画出椭圆轨道线），单位 AU
-//  用当前时刻 jd 的瞬时根数，沿偏近点角 E 均匀采样一圈
+//  Sample the full orbit (to draw the elliptical orbit line), units: AU
+//  Uses the instantaneous elements at the current jd, sampling one full loop
+//  uniformly in eccentric anomaly E
 // ---------------------------------------------------------------------------
 export function orbitPath(key, jd, segments = 360) {
   const T = (jd - 2451545.0) / 36525;
@@ -139,15 +147,67 @@ export function orbitPath(key, jd, segments = 360) {
 }
 
 // ---------------------------------------------------------------------------
-//  月球：地心近似轨道（简化模型，仅用于可视化，不追求高精度星历）
-//  返回相对地球的黄道偏移量（AU）
-//  平均：轨道半径 0.00257 AU，恒星月 27.321661 天，倾角约 5.14°
+//  Vis-viva: instantaneous, perihelion and aphelion speeds of a planet.
+//    v      = √( GM · (2/r − 1/a) )         (current orbital speed)
+//    v_peri = √( GM/a · (1+e)/(1−e) )       (fastest, at perihelion)
+//    v_aph  = √( GM/a · (1−e)/(1+e) )       (slowest, at aphelion)
+//  All returned in AU/day; multiply by AU_DAY_TO_KM_S for km/s.
+//  Also returns r (current Sun distance), and rPeri/rAph = a(1∓e).
+// ---------------------------------------------------------------------------
+export function orbitalSpeeds(key, jd) {
+  const T = (jd - 2451545.0) / 36525;
+  const { a, e } = elementsAt(key, T);
+  const p = heliocentricPosition(key, jd);
+  const r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+  return {
+    a, e, r,
+    rPeri: a * (1 - e),
+    rAph:  a * (1 + e),
+    v:     Math.sqrt(GM_SUN * (2 / r - 1 / a)),
+    vPeri: Math.sqrt(GM_SUN / a * (1 + e) / (1 - e)),
+    vAph:  Math.sqrt(GM_SUN / a * (1 - e) / (1 + e))
+  };
+}
+
+// ---------------------------------------------------------------------------
+//  Comets: solved from a fixed set of orbital elements (no per-century rates).
+//  Element convention here is the one used in comet catalogs:
+//    a     semi-major axis (AU)      e   eccentricity
+//    I     inclination (°)           argp argument of perihelion ω (°)
+//    node  longitude of ascending node Ω (°)
+//    tperi Julian Date of perihelion passage
+//    period orbital period (days)
+// ---------------------------------------------------------------------------
+export function cometPosition(c, jd) {
+  const M = normalize(2 * Math.PI * (jd - c.tperi) / c.period);
+  const E = solveKepler(M, c.e);
+  const xp = c.a * (Math.cos(E) - c.e);
+  const yp = c.a * Math.sqrt(1 - c.e * c.e) * Math.sin(E);
+  return orbitalToEcliptic(xp, yp, c.node * DEG, c.argp * DEG, c.I * DEG);
+}
+
+export function cometOrbitPath(c, segments = 720) {
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const E = (i / segments) * 2 * Math.PI;
+    const xp = c.a * (Math.cos(E) - c.e);
+    const yp = c.a * Math.sqrt(1 - c.e * c.e) * Math.sin(E);
+    pts.push(orbitalToEcliptic(xp, yp, c.node * DEG, c.argp * DEG, c.I * DEG));
+  }
+  return pts;
+}
+
+// ---------------------------------------------------------------------------
+//  Moon: geocentric approximate orbit (simplified model, for visualization only,
+//  not a high-precision ephemeris)
+//  Returns the ecliptic offset relative to Earth (AU)
+//  Averages: orbital radius 0.00257 AU, sidereal month 27.321661 days, inclination ~5.14°
 // ---------------------------------------------------------------------------
 export function moonOffset(jd) {
   const period = 27.321661;
   const meanRadius = 0.00257;
   const inc = 5.145 * DEG;
-  // 以 J2000 为相位起点的平均角度
+  // Mean angle with J2000 as the phase origin
   const phase = ((jd - 2451545.0) / period) * 2 * Math.PI;
   const x = meanRadius * Math.cos(phase);
   const y = meanRadius * Math.sin(phase) * Math.cos(inc);

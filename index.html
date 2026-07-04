@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>宇宙轨道图鉴 · 太阳系</title>
+  <title>Cosmic Orbits · Solar System</title>
   <link rel="stylesheet" href="styles.css" />
-  <!-- importmap：零构建，从 CDN 加载 Three.js（含 addons） -->
+  <!-- importmap: zero-build, load Three.js (with addons) from CDN -->
   <script type="importmap">
   {
     "imports": {
@@ -16,59 +16,97 @@
   </script>
 </head>
 <body>
-  <!-- 3D 场景挂载点 -->
+  <!-- Landing / main interface (covers the app until the user enters) -->
+  <div id="landing">
+    <div class="landing-stars"></div>
+    <div class="landing-stars layer2"></div>
+    <div class="landing-content">
+      <div class="landing-badge">Real astronomical data · Three.js 3D</div>
+      <h1 class="landing-title">🌌 Cosmic Orbits</h1>
+      <p class="landing-sub">An interactive 3D atlas of the Solar System and our stellar neighborhood, driven by real NASA/JPL orbital data — watch planets trace true Keplerian orbits and place nearby stars in real 3D space.</p>
+      <ul class="landing-features">
+        <li>🪐 Real-time Keplerian orbits</li>
+        <li>🛰 NASA imagery textures</li>
+        <li>✨ 16 nearby &amp; famous stars</li>
+        <li>🔭 8-year sky-event forecast</li>
+      </ul>
+      <div class="landing-actions">
+        <button id="enterSolar" class="cta primary">Enter the Solar System →</button>
+        <button id="enterStars" class="cta">Explore Nearby Stars</button>
+      </div>
+      <div class="landing-foot">Textures © Solar System Scope · CC BY 4.0 · Orbital data NASA/JPL</div>
+    </div>
+  </div>
+
+  <!-- 3D scene mount point -->
   <div id="scene"></div>
 
-  <!-- 顶部标题 + 模式切换 -->
+  <!-- Top: title + mode switch -->
   <header id="topbar">
-    <h1>🌌 宇宙轨道图鉴</h1>
-    <span class="subtitle">真实天文数据驱动</span>
+    <h1>🌌 Cosmic Orbits</h1>
+    <span class="subtitle">Driven by real astronomical data</span>
     <div class="tabs">
-      <button id="tabSolar" class="active">太阳系</button>
-      <button id="tabStars">邻近恒星</button>
+      <button id="tabSolar" class="active">Solar System</button>
+      <button id="tabStars">Nearby Stars</button>
     </div>
   </header>
 
-  <!-- 左下：控制面板 -->
+  <!-- Bottom-left: control panel -->
   <div id="controls">
     <div id="timeControls">
       <div class="row date-row">
-        <span class="label-sm">模拟时间</span>
+        <span class="label-sm">Simulated time</span>
         <strong id="dateLabel">—</strong>
       </div>
       <div class="row">
-        <button id="playBtn">⏸ 暂停</button>
-        <button id="nowBtn">↺ 回到今天</button>
+        <button id="playBtn">⏸ Pause</button>
+        <button id="nowBtn">↺ Back to today</button>
       </div>
       <div class="row">
-        <span class="label-sm">流速</span>
+        <span class="label-sm">Speed</span>
         <input type="range" id="speed" min="-200" max="200" step="1" value="5" />
-        <span id="speedLabel" class="label-sm">5 天 / 秒</span>
+        <span id="speedLabel" class="label-sm">5 days / sec</span>
       </div>
       <div class="row">
-        <label class="checkbox"><input type="checkbox" id="orbitsToggle" checked /> 显示轨道线</label>
-        <button id="eventsBtn" class="mini-btn">🔭 天象预测</button>
+        <label class="checkbox"><input type="checkbox" id="orbitsToggle" checked /> Orbit lines</label>
+        <button id="eventsBtn" class="mini-btn">🔭 Sky events</button>
+      </div>
+      <div class="row toggles-row">
+        <label class="checkbox"><input type="checkbox" id="sweepToggle" checked /> ⟠ Kepler sweep</label>
+        <label class="checkbox" title="Bring the far outer planets and comet orbits closer so the whole system fits on screen"><input type="checkbox" id="compactToggle" /> 🪐 Compact distances</label>
       </div>
     </div>
     <div class="row body-list" id="bodyList"></div>
   </div>
 
-  <!-- 右侧：天体信息面板 -->
+  <!-- Right: object info panel -->
   <aside id="info"></aside>
 
-  <!-- 天象预测面板 -->
+  <!-- Sky-events panel -->
   <aside id="eventsPanel">
     <div class="ev-head">
-      <h2>🔭 未来 8 年天象预测</h2>
+      <h2>🔭 Sky Events · Next 8 Years</h2>
       <button id="eventsClose">✕</button>
     </div>
-    <p class="ev-note">由真实轨道数据算出 · 点击可跳转到该日期</p>
+    <p class="ev-note">Computed from real orbital data · click to jump to that date</p>
     <ul id="eventsList"></ul>
   </aside>
 
-  <!-- 底部提示 -->
-  <div id="hint">🖱 拖动旋转 · 滚轮缩放 · 点击天体查看特征</div>
-  <div id="credit">贴图 © <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> · CC BY 4.0 · 轨道数据 NASA/JPL</div>
+  <!-- Second layer: orbit/position + gravity derivation (modal overlay) -->
+  <div id="deriveOverlay">
+    <aside id="derivePanel" role="dialog" aria-modal="true">
+      <div class="ev-head">
+        <h2 id="deriveTitle">Derivation</h2>
+        <button id="deriveClose">✕</button>
+      </div>
+      <p class="ev-note" id="deriveSub">The math behind this object</p>
+      <div id="deriveBody"></div>
+    </aside>
+  </div>
+
+  <!-- Bottom hints -->
+  <div id="hint">🖱 Drag to rotate · scroll to zoom · click a body to see its features</div>
+  <div id="credit">Textures © <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a> · CC BY 4.0 · Orbital data NASA/JPL</div>
 
   <script type="module" src="src/main.js"></script>
 </body>

@@ -1,43 +1,45 @@
 // ============================================================================
-//  events.js — 天象预测引擎
+//  events.js — sky-event prediction engine
 // ----------------------------------------------------------------------------
-//  复用 kepler.js 的轨道解算，扫描未来若干年，检测：
-//   · 外行星的「冲」(opposition)        —— 行星与太阳地心黄经相差 180°，整夜可见、最亮
-//   · 内行星的「大距」(elongation)       —— 水星/金星离太阳角距最大，最易观测
-//   · 亮行星之间的「相合」(conjunction)  —— 两行星在天空中靠得最近
-//  这些都是可用真实轨道数据精确算出的日期，非估算。
+//  Reuses the orbit solver in kepler.js, scanning several years ahead to detect:
+//   · Opposition of an outer planet   — planet and Sun 180° apart in geocentric
+//                                        longitude; visible all night, brightest.
+//   · Greatest elongation of an inner  — Mercury/Venus at max angular distance
+//     planet                             from the Sun; easiest to observe.
+//   · Conjunction of two bright planets — two planets appear closest together.
+//  These are exact dates computed from real orbital data, not estimates.
 // ============================================================================
 import { heliocentricPosition, julianDate } from './kepler.js';
 
 const RAD2DEG = 180 / Math.PI;
 
-// 归一到 [-180, 180]
+// Normalize to [-180, 180]
 function norm180(a) {
   a = ((a % 360) + 360) % 360;
   return a > 180 ? a - 360 : a;
 }
 
-// 某行星的「地心黄经」(deg)：从地球看过去的方向
+// Geocentric longitude of a planet (deg): its direction as seen from Earth
 function geoLon(key, jd) {
   const p = heliocentricPosition(key, jd);
   const e = heliocentricPosition('earth', jd);
   return Math.atan2(p.y - e.y, p.x - e.x) * RAD2DEG;
 }
 
-// 太阳的地心黄经：从地球看太阳 = 地球日心方向的反向
+// Geocentric longitude of the Sun: seen from Earth = opposite of Earth’s heliocentric direction
 function sunGeoLon(jd) {
   const e = heliocentricPosition('earth', jd);
   return Math.atan2(-e.y, -e.x) * RAD2DEG;
 }
 
 const NAME = {
-  mercury: '水星', venus: '金星', mars: '火星', jupiter: '木星',
-  saturn: '土星', uranus: '天王星', neptune: '海王星'
+  mercury: 'Mercury', venus: 'Venus', mars: 'Mars', jupiter: 'Jupiter',
+  saturn: 'Saturn', uranus: 'Uranus', neptune: 'Neptune'
 };
 
 function jdToDate(jd) { return new Date((jd - 2440587.5) * 86400000); }
 function fmt(d) {
-  return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit' });
 }
 
 const OUTER = ['mars', 'jupiter', 'saturn', 'uranus', 'neptune'];
@@ -47,7 +49,7 @@ const PAIRS = [
   ['mars', 'jupiter'], ['mars', 'saturn'], ['jupiter', 'saturn']
 ];
 
-// 计算某时刻的快照
+// Compute a snapshot at a given instant
 function snapshot(jd) {
   const sun = sunGeoLon(jd);
   const planet = {}, elong = {}, pairDiff = {};
@@ -60,7 +62,7 @@ function snapshot(jd) {
 }
 
 // ---------------------------------------------------------------------------
-//  主函数：从 startDate 起扫描 years 年，返回按日期排序的天象列表
+//  Main: scan `years` years from startDate, return events sorted by date
 // ---------------------------------------------------------------------------
 export function computeEvents(startDate, years = 8) {
   const jd0 = julianDate(startDate);
@@ -73,27 +75,27 @@ export function computeEvents(startDate, years = 8) {
     const cur = snapshot(jd);
 
     if (prev) {
-      // —— 外行星「冲」：elong 在 ±180 处跳变
+      // — Outer-planet opposition: elong flips across ±180
       for (const k of OUTER) {
         if (Math.abs(prev.elong[k] - cur.elong[k]) > 180) {
           events.push({
-            jd, type: 'opposition', title: `${NAME[k]}冲日`,
-            desc: `${NAME[k]}与太阳地心方向相差 180°，整夜可见、最亮最大，是全年最佳观测期。`
+            jd, type: 'opposition', title: `${NAME[k]} at opposition`,
+            desc: `${NAME[k]} sits 180° from the Sun as seen from Earth — visible all night, at its brightest and largest. The best viewing window of the year.`
           });
         }
       }
-      // —— 亮行星「相合」：两行星地心黄经差越过 0
+      // — Bright-planet conjunction: the pair’s geocentric-longitude difference crosses 0
       for (const [x, y] of PAIRS) {
         const a = prev.pairDiff[`${x}_${y}`], b = cur.pairDiff[`${x}_${y}`];
         if (a * b < 0 && Math.abs(a) + Math.abs(b) < 60) {
           events.push({
-            jd, type: 'conjunction', title: `${NAME[x]}合${NAME[y]}`,
-            desc: `${NAME[x]}与${NAME[y]}在天空中相合，黄经接近一致，是难得的双星同框景象。`
+            jd, type: 'conjunction', title: `${NAME[x]}–${NAME[y]} conjunction`,
+            desc: `${NAME[x]} and ${NAME[y]} meet in the sky at nearly the same longitude — a rare chance to see two planets in one frame.`
           });
         }
       }
     }
-    // —— 内行星「大距」：|elong| 出现三点局部极大值（发生在 prev 时刻）
+    // — Inner-planet greatest elongation: |elong| shows a local max across three points (at the prev instant)
     if (prev2 && prev) {
       for (const k of INNER) {
         const p0 = Math.abs(prev2.elong[k]), p1 = Math.abs(prev.elong[k]), p2 = Math.abs(cur.elong[k]);
@@ -101,8 +103,8 @@ export function computeEvents(startDate, years = 8) {
           const east = prev.elong[k] > 0;
           events.push({
             jd: prev.jd, type: 'elongation',
-            title: `${NAME[k]}${east ? '东' : '西'}大距`,
-            desc: `${NAME[k]}离太阳角距达最大（约 ${p1.toFixed(0)}°），${east ? '日落后现于西方天空' : '日出前现于东方天空'}，最易观测。`
+            title: `${NAME[k]} at greatest ${east ? 'eastern' : 'western'} elongation`,
+            desc: `${NAME[k]} reaches its maximum angular distance from the Sun (~${p1.toFixed(0)}°), ${east ? 'appearing in the western sky after sunset' : 'appearing in the eastern sky before sunrise'} — easiest to observe.`
           });
         }
       }
