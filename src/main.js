@@ -329,6 +329,7 @@ const state = {
   showSweep: true,
   selectedKey: null,   // key of the currently selected body (for the sweep sector)
   mode: 'solar',   // 'solar' | 'stars'
+  follow: false,   // when true, the camera keeps the selected body centred as it orbits
 };
 refreshOrbits();
 
@@ -423,7 +424,7 @@ function typeName(obj) {
   if (obj.spectral) return 'Star · ' + obj.spectral;
   return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet' }[obj.type] || obj.type;
 }
-function selectObject(obj) { state.selectedKey = obj.key; showInfo(obj); focusOn(obj.key); }
+function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMeshes[obj.key] || null; showInfo(obj); focusOn(obj.key); }
 function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -501,6 +502,11 @@ function updateLivePhysics(jd) {
 
 // Camera focus
 let focusTarget = null;
+// Follow-cam: the mesh the camera should stay centred on (set on select).
+// Kept as a solar-system body mesh only; stars don't move so follow is a no-op there.
+let followTarget = null;
+const _followP = new THREE.Vector3();
+const _followDelta = new THREE.Vector3();
 function focusOn(key) {
   const map = state.mode === 'solar' ? bodyMeshes : starMeshes;
   if (map[key]) focusTarget = map[key];
@@ -529,6 +535,7 @@ document.getElementById('orbitsToggle').addEventListener('change', e => {
 });
 document.getElementById('sweepToggle').addEventListener('change', e => { state.showSweep = e.target.checked; });
 document.getElementById('compactToggle').addEventListener('change', e => { compressTarget = e.target.checked ? 1 : 0; });
+document.getElementById('followToggle').addEventListener('change', e => { state.follow = e.target.checked; });
 
 // Quick-select chips for bodies / stars (rebuilt on mode switch)
 function rebuildChips() {
@@ -555,6 +562,7 @@ function setMode(m) {
   tabSolar.classList.toggle('active', m === 'solar');
   tabStars.classList.toggle('active', m === 'stars');
   focusTarget = null;
+  followTarget = null;
   state.selectedKey = null;
   controls.target.set(0, 0, 0);
   camera.position.set(0, m === 'solar' ? 120 : 260, m === 'solar' ? 260 : 620);
@@ -651,6 +659,18 @@ function animate() {
     const desired = target.clone().add(new THREE.Vector3(0, size * 6 + 6, size * 10 + 16));
     camera.position.lerp(desired, 0.06);
     if (camera.position.distanceTo(desired) < 1) focusTarget = null;
+  }
+
+  // Follow-cam: once any one-shot flight (focusTarget) has finished, keep the
+  // camera locked onto the moving body. We translate BOTH the orbit target and
+  // the camera by the body's per-frame displacement, so the object stays centred
+  // while the user keeps their own zoom and rotation angle.
+  if (state.follow && followTarget && !focusTarget && state.mode === 'solar'
+      && followTarget.userData.body) {
+    const p = followTarget.getWorldPosition(_followP);
+    _followDelta.subVectors(p, controls.target);
+    controls.target.add(_followDelta);
+    camera.position.add(_followDelta);
   }
 
   controls.update();
