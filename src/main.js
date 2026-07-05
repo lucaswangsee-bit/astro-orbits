@@ -554,10 +554,22 @@ function rebuildChips() {
 // Mode switching
 const tabSolar = document.getElementById('tabSolar');
 const tabStars = document.getElementById('tabStars');
+// Toggle every CSS2DObject label inside a group. The CSS2DRenderer in this
+// build honours only each label's own `.visible`, not its parent Group's, so
+// hiding a Group leaves its text labels floating — we must set them explicitly.
+function setLabelsVisible(group, visible) {
+  group.traverse(o => {
+    if (o.isCSS2DObject || o.element) o.visible = visible;
+  });
+}
+
 function setMode(m) {
   state.mode = m;
   solarGroup.visible = (m === 'solar');
   starsGroup.visible = (m === 'stars');
+  // Keep labels in lock-step with their mode (see setLabelsVisible above).
+  setLabelsVisible(solarGroup, m === 'solar');
+  setLabelsVisible(starsGroup, m === 'stars');
   timeControls.style.display = (m === 'solar') ? '' : 'none';
   tabSolar.classList.toggle('active', m === 'solar');
   tabStars.classList.toggle('active', m === 'stars');

@@ -18,7 +18,7 @@
 
 export const SUN = {
   key: 'sun', nameZh: 'Sun', nameEn: 'Sun', type: 'star',
-  color: 0xffcc33, displaySize: 3.0, spinHours: 609.12, texture: 'assets/textures/2k_sun.jpg',
+  color: 0xffcc33, displaySize: 2.0, spinHours: 609.12, texture: 'assets/textures/2k_sun.jpg',
   facts: {
     'Type': 'G2V yellow dwarf',
     'Diameter': '1,392,700 km (~109 Earths)',
