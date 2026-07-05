@@ -424,7 +424,7 @@ function typeName(obj) {
   if (obj.spectral) return 'Star · ' + obj.spectral;
   return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet' }[obj.type] || obj.type;
 }
-function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMeshes[obj.key] || null; showInfo(obj); focusOn(obj.key); }
+function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMeshes[obj.key] || null; showInfo(obj); focusOn(obj.key); syncHash(); }
 function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -581,8 +581,8 @@ function setMode(m) {
   rebuildChips();
   infoEl.classList.remove('visible');
 }
-tabSolar.onclick = () => setMode('solar');
-tabStars.onclick = () => setMode('stars');
+tabSolar.onclick = () => { setMode('solar'); syncHash(); };
+tabStars.onclick = () => { setMode('stars'); syncHash(); };
 
 // ---------------------------------------------------------------------------
 //  Sky-events panel (computed lazily)
@@ -627,13 +627,102 @@ showInfo(SUN);
 //  Landing / main interface — cover screen shown before entering the app
 // ---------------------------------------------------------------------------
 const landing = document.getElementById('landing');
+// Whether we've left the cover screen for a 3D view (drives landing vs. view
+// in the hash router below).
+let appEntered = false;
 function enterApp(mode) {
+  appEntered = true;
   setMode(mode);
   landing.classList.add('hidden');
   setTimeout(() => { landing.style.display = 'none'; }, 800); // remove after fade-out
 }
-document.getElementById('enterSolar').onclick = () => enterApp('solar');
-document.getElementById('enterStars').onclick = () => enterApp('stars');
+document.getElementById('enterSolar').onclick = () => { enterApp('solar'); syncHash(); };
+document.getElementById('enterStars').onclick = () => { enterApp('stars'); syncHash(); };
+
+// ---------------------------------------------------------------------------
+//  Hash routing — every view has its own shareable, reload-safe link.
+//  Scheme (hash-based so GitHub Pages deep links survive a refresh):
+//    #/                  → cover / landing screen
+//    #/solar             → Solar System, no selection
+//    #/solar/<key>       → Solar System + that body selected  (e.g. #/solar/earth)
+//    #/stars             → Nearby Stars, no selection
+//    #/stars/<key>       → Nearby Stars + that star selected  (e.g. #/stars/sirius)
+//  `sun` exists in both modes; the mode prefix disambiguates.
+// ---------------------------------------------------------------------------
+
+// Look up a body/star DATA object by key within a mode (null if unknown).
+function dataForKey(mode, key) {
+  const mesh = mode === 'solar' ? bodyMeshes[key] : starMeshes[key];
+  if (!mesh) return null;
+  return mode === 'solar' ? mesh.userData.body : mesh.userData.star;
+}
+
+// Build the hash string that describes the CURRENT view.
+function currentHash() {
+  if (!appEntered) return '#/';
+  return state.selectedKey && dataForKey(state.mode, state.selectedKey)
+    ? `#/${state.mode}/${state.selectedKey}`
+    : `#/${state.mode}`;
+}
+
+// Write the current view into location.hash (creating a history entry so the
+// browser Back/Forward buttons work). We set a guard so the resulting
+// `hashchange` event is ignored — this prevents the select→hash→hashchange→
+// select feedback loop.
+let suppressHashChange = false;
+function syncHash() {
+  const h = currentHash();
+  if (location.hash === h) return;   // already correct — no new history entry, no loop
+  suppressHashChange = true;
+  location.hash = h;
+}
+
+// Parse a hash into { mode, key } or null (empty/root → landing).
+function parseHash(hash) {
+  const raw = (hash || '').replace(/^#\/?/, '');   // strip leading '#' and optional '/'
+  if (!raw) return null;
+  const [mode, key] = raw.split('/');
+  if (mode !== 'solar' && mode !== 'stars') return null;
+  return { mode, key: key || null };
+}
+
+// Apply a route to the app. Idempotent: re-applying the same route is a no-op
+// beyond the (cheap) redundant setMode/selectObject, and it never touches the
+// hash itself, so it cannot re-trigger hashchange.
+function applyRoute(route) {
+  if (!route) {   // root → show the cover screen
+    if (appEntered) {   // e.g. Back button from a view to the landing
+      appEntered = false;
+      landing.classList.remove('hidden');
+      landing.style.display = '';
+    }
+    return;
+  }
+  // Enter the app (skipping the cover) if we're not already in it.
+  if (!appEntered) enterApp(route.mode);
+  else if (state.mode !== route.mode) setMode(route.mode);
+
+  if (route.key) {
+    const data = dataForKey(route.mode, route.key);
+    if (data) {
+      if (state.selectedKey !== route.key) selectObject(data);
+    } else if (state.selectedKey !== null) {
+      // Unknown key → fall back to the mode overview (no selection, no throw).
+      setMode(route.mode);
+    }
+  } else if (state.selectedKey !== null) {
+    // Bare mode route but something is selected → clear back to the overview.
+    setMode(route.mode);
+  }
+}
+
+// Restore on load (deep link), then keep in sync with Back/Forward.
+function handleHashChange() {
+  if (suppressHashChange) { suppressHashChange = false; return; }
+  applyRoute(parseHash(location.hash));
+}
+window.addEventListener('hashchange', handleHashChange);
+applyRoute(parseHash(location.hash));   // initial deep-link restore
 
 // ---------------------------------------------------------------------------
 //  Render loop
