@@ -17,6 +17,12 @@ const DEG = Math.PI / 180;
 export const GM_SUN = 2.959122082855911e-4;   // AU³ / day²
 export const AU_DAY_TO_KM_S = 1731.456837;    // 1 AU/day = 149597870.7 km / 86400 s
 
+// Unit conversions for SI-valued derived quantities (energy, angular momentum)
+const AU_M = 1.495978707e11;             // 1 AU in metres
+const DAY_S = 86400;                      // 1 day in seconds
+const VEL2_MS = (AU_M / DAY_S) ** 2;     // (m/s)² per (AU/day)²  — specific orbital energy
+const AREA_MS = (AU_M * AU_M) / DAY_S;   // (m²/s) per (AU²/day)  — angular momentum / areal velocity
+
 // The 6 orbital elements per planet and their linear rate of change "per Julian century":
 //   a    semi-major axis          (AU)
 //   e    eccentricity             (dimensionless)
@@ -166,6 +172,49 @@ export function orbitalSpeeds(key, jd) {
     v:     Math.sqrt(GM_SUN * (2 / r - 1 / a)),
     vPeri: Math.sqrt(GM_SUN / a * (1 + e) / (1 - e)),
     vAph:  Math.sqrt(GM_SUN / a * (1 - e) / (1 + e))
+  };
+}
+
+// ---------------------------------------------------------------------------
+//  Orbital dynamics: conserved quantities and derived laws for a planet.
+//    T   = 2π√(a³/GM)              Kepler's third law (period)
+//    ε   = −GM/2a                  specific orbital energy (constant along the orbit)
+//    h   = √(GM·a(1−e²))           specific angular momentum (constant)
+//    dA/dt = h/2                   Kepler's second law (areal velocity, constant)
+//    v_esc = √(2GM/r)              local escape speed from the Sun at distance r
+//    ν                             true anomaly (angle from perihelion)
+//    T_syn                         synodic period relative to Earth
+//  Energy/momentum are returned in SI (J/kg, m²/s); speeds via AU_DAY_TO_KM_S.
+// ---------------------------------------------------------------------------
+export function orbitalDynamics(key, jd) {
+  const T = (jd - 2451545.0) / 36525;
+  const { a, e, L, peri } = elementsAt(key, T);
+  const M = normalize(L - peri);
+  const E = solveKepler(M, e);
+  const nu = normalize(2 * Math.atan2(Math.sqrt(1 + e) * Math.sin(E / 2),
+                                      Math.sqrt(1 - e) * Math.cos(E / 2)));
+  const p = heliocentricPosition(key, jd);
+  const r = Math.sqrt(p.x * p.x + p.y * p.y + p.z * p.z);
+
+  const periodDays = 2 * Math.PI * Math.sqrt(a * a * a / GM_SUN);
+  const ea = elementsAt('earth', T).a;
+  const earthPeriodDays = 2 * Math.PI * Math.sqrt(ea * ea * ea / GM_SUN);
+  const invSyn = Math.abs(1 / periodDays - 1 / earthPeriodDays);
+  const synodicDays = invSyn > 1e-9 ? 1 / invSyn : Infinity;
+
+  const eps = -GM_SUN / (2 * a);            // AU²/day²  (specific energy)
+  const h = Math.sqrt(GM_SUN * a * (1 - e * e)); // AU²/day (specific angular momentum)
+  const vEsc = Math.sqrt(2 * GM_SUN / r);   // AU/day
+
+  return {
+    a, e, r,
+    Mdeg: M / DEG, Edeg: E / DEG, nuDeg: nu / DEG,
+    periodDays, periodYears: periodDays / 365.25,
+    synodicDays, synodicYears: synodicDays / 365.25,
+    epsSI: eps * VEL2_MS,                    // J/kg
+    hSI: h * AREA_MS,                        // m²/s
+    dAdtSI: (h / 2) * AREA_MS,               // m²/s
+    vEscKmS: vEsc * AU_DAY_TO_KM_S           // km/s
   };
 }
 

@@ -8,7 +8,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 import {
   heliocentricPosition, orbitPath, moonOffset, julianDate,
-  orbitalSpeeds, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S
+  orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
@@ -438,17 +438,21 @@ function showInfo(data) {
     <p class="blurb">${data.blurb}</p>
     ${data.type === 'planet' ? `
     <h3>Live physics · Vis-viva</h3>
+    <div class="formula-block sm">$$v^2 = GM\\!\\left(\\frac{2}{r} - \\frac{1}{a}\\right)$$</div>
     <table class="facts live-physics">
       <tr><td>Orbital speed now</td><td><span id="lpV" class="lp-val">—</span></td></tr>
       <tr><td>Sun distance now</td><td><span id="lpR">—</span></td></tr>
       <tr><td>At perihelion (fastest)</td><td><span id="lpVp">—</span></td></tr>
       <tr><td>At aphelion (slowest)</td><td><span id="lpVa">—</span></td></tr>
+      <tr><td>True anomaly ν</td><td><span id="lpNu">—</span></td></tr>
+      <tr><td>Escape speed (here)</td><td><span id="lpVesc">—</span></td></tr>
     </table>` : ''}
     <h3>Notable features</h3><ul class="highlights">${highlights}</ul>
     <h3>Key data</h3><table class="facts">${facts}</table>
     ${data.mechanics ? `
     <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
   infoEl.classList.add('visible');
+  renderMath(infoEl);
   const db = document.getElementById('deriveBtn');
   if (db) db.onclick = () => openDerivation(data);
 }
@@ -460,26 +464,103 @@ function isStar(data) { return !!data.spectral || data.type === 'star'; }
 //  Second layer: orbit / position + surface-gravity derivation (modal overlay)
 // ---------------------------------------------------------------------------
 const deriveOverlay = document.getElementById('deriveOverlay');
+
+// Typeset every $$…$$ / \(…\) block inside an element with KaTeX (if loaded)
+function renderMath(el) {
+  if (!el || !window.renderMathInElement) return;
+  window.renderMathInElement(el, {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '\\(', right: '\\)', display: false }
+    ],
+    throwOnError: false
+  });
+}
+
+// Format a number in scientific notation with Unicode superscripts, e.g. 4.46×10¹⁵
+function fmtExp(x, digits = 2) {
+  if (!isFinite(x) || x === 0) return String(x);
+  const exp = Math.floor(Math.log10(Math.abs(x)));
+  const mant = (x / 10 ** exp).toFixed(digits);
+  const sup = String(exp).replace(/[-0-9]/g, c => (c === '-' ? '⁻' : '⁰¹²³⁴⁵⁶⁷⁸⁹'[+c]));
+  return `${mant}×10${sup}`;
+}
+
 function openDerivation(data) {
   const m = data.mechanics;
   if (!m) return;
   const star = isStar(data);
+  // Standard (general) formulas, rendered as textbook math above the worked numbers
+  const posFormula = star
+    ? String.raw`$$x = d\cos\delta\cos\alpha,\quad y = d\cos\delta\sin\alpha,\quad z = d\sin\delta$$`
+    : String.raw`$$M = E - e\sin E \qquad r = a\,(1 - e\cos E)$$` +
+      String.raw`$$v^2 = GM\!\left(\frac{2}{r} - \frac{1}{a}\right)$$`;
+  const gFormula = star
+    ? String.raw`$$g = g_\odot\,\frac{M/M_\odot}{(R/R_\odot)^2}$$`
+    : String.raw`$$g = \frac{GM}{R^2}$$`;
+  const isPlanet = data.type === 'planet';
+  const dyn = isPlanet ? orbitalDynamics(data.key, julianDate(state.simDate)) : null;
+  const lawFormula = String.raw`$$T = 2\pi\sqrt{\tfrac{a^3}{GM}}\qquad \varepsilon = -\frac{GM}{2a}\qquad h = \sqrt{GM\,a(1-e^2)}\qquad \frac{dA}{dt}=\frac{h}{2}$$`;
+  // Derived reference quantities (Solar-System bodies carry mass/radius; planets also albedo)
+  let vEsc, vOrb, rho, teq = null;
+  const derivedFormula = String.raw`$$v_{\text{esc}}=\sqrt{\tfrac{2GM}{R}}\qquad v_{\text{orb}}=\sqrt{\tfrac{GM}{R}}\qquad \rho=\frac{M}{\tfrac{4}{3}\pi R^3}\qquad T_{\text{eq}}=T_\odot\sqrt{\tfrac{R_\odot}{2d}}(1-A)^{1/4}$$`;
+  if (m.massKg) {
+    const G = 6.674e-11, GMb = G * m.massKg, R = m.radiusM;
+    vEsc = Math.sqrt(2 * GMb / R) / 1000;
+    vOrb = Math.sqrt(GMb / R) / 1000;
+    rho = m.massKg / ((4 / 3) * Math.PI * R ** 3) / 1000;   // kg/m³ → g/cm³
+    if (isPlanet && m.albedo != null && dyn) {
+      const Tsun = 5772, Rsun = SUN.mechanics.radiusM, AU_M = 1.495978707e11;
+      teq = Tsun * Math.sqrt(Rsun / (2 * dyn.a * AU_M)) * (1 - m.albedo) ** 0.25;
+    }
+  }
   document.getElementById('deriveTitle').textContent = `${data.nameZh} — derivation`;
   document.getElementById('deriveSub').textContent = star
     ? 'How its 3D position is mapped, and how its surface gravity is found'
     : 'How its orbit is solved, and how its surface gravity is found';
-  document.getElementById('deriveBody').innerHTML = `
+  const body = document.getElementById('deriveBody');
+  body.innerHTML = `
     <div class="derive-section">
       <h3>${star ? '3D position mapping' : 'Orbit computation'}</h3>
+      <div class="formula-block">${posFormula}</div>
       <p class="mech-note">${m.orbit}</p>
     </div>
+    ${isPlanet ? `
+    <div class="derive-section">
+      <h3>Conservation &amp; orbital laws</h3>
+      <div class="formula-block">${lawFormula}</div>
+      <table class="facts">
+        <tr><td>Kepler III · period T</td><td class="mech-g">${dyn.periodYears.toFixed(2)} yr</td></tr>
+        <tr><td>Specific energy ε</td><td>${(dyn.epsSI / 1e6).toFixed(1)} MJ/kg <span class="const-tag">conserved</span></td></tr>
+        <tr><td>Specific ang. momentum h</td><td>${fmtExp(dyn.hSI)} m²/s <span class="const-tag">conserved</span></td></tr>
+        <tr><td>Areal velocity dA/dt</td><td>${fmtExp(dyn.dAdtSI)} m²/s</td></tr>
+        <tr><td>Synodic period vs Earth</td><td>${isFinite(dyn.synodicDays) ? dyn.synodicDays.toFixed(0) + ' days (' + dyn.synodicYears.toFixed(2) + ' yr)' : '—'}</td></tr>
+      </table>
+    </div>` : ''}
     <div class="derive-section">
       <h3>Surface gravity</h3>
+      ${m.gCalc
+        ? `<div class="formula-block">$$${m.gCalc}$$</div>`
+        : `<div class="formula-block">${gFormula}</div>`}
       <table class="facts">
         <tr><td>Value</td><td class="mech-g">${m.gValue}</td></tr>
-        <tr><td>How g is found</td><td class="mech-formula">${m.gMethod}</td></tr>
+        ${m.gCalc
+          ? (m.gNote ? `<tr><td>Notes</td><td class="mech-note">${m.gNote}</td></tr>` : '')
+          : `<tr><td>How g is found</td><td class="mech-formula">${m.gMethod}</td></tr>`}
       </table>
-    </div>`;
+    </div>
+    ${m.massKg ? `
+    <div class="derive-section">
+      <h3>Derived reference quantities</h3>
+      <div class="formula-block">${derivedFormula}</div>
+      <table class="facts">
+        <tr><td>Surface escape speed</td><td class="mech-g">${vEsc.toFixed(2)} km/s</td></tr>
+        <tr><td>Orbital (first cosmic) speed</td><td>${vOrb.toFixed(2)} km/s</td></tr>
+        <tr><td>Mean density</td><td>${rho.toFixed(2)} g/cm³${rho < 1 ? ' <span class="const-tag">&lt; water</span>' : ''}</td></tr>
+        ${teq != null ? `<tr><td>Equilibrium temp.</td><td>${teq.toFixed(0)} K (${(teq - 273.15).toFixed(0)} °C) <span class="const-tag">no greenhouse</span></td></tr>` : ''}
+      </table>
+    </div>` : ''}`;
+  renderMath(body);
   deriveOverlay.classList.add('visible');
 }
 function closeDerivation() { deriveOverlay.classList.remove('visible'); }
@@ -494,10 +575,13 @@ function updateLivePhysics(jd) {
   const el = document.getElementById('lpV');
   if (!el) return;
   const s = orbitalSpeeds(k, jd);
+  const d = orbitalDynamics(k, jd);
   el.textContent = (s.v * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
   document.getElementById('lpR').textContent  = s.r.toFixed(3) + ' AU';
   document.getElementById('lpVp').textContent = (s.vPeri * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
   document.getElementById('lpVa').textContent = (s.vAph * AU_DAY_TO_KM_S).toFixed(2) + ' km/s';
+  document.getElementById('lpNu').textContent = d.nuDeg.toFixed(1) + '°';
+  document.getElementById('lpVesc').textContent = d.vEscKmS.toFixed(2) + ' km/s';
 }
 
 // Camera focus

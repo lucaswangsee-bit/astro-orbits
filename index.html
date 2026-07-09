@@ -5,6 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Cosmic Orbits · Solar System</title>
   <link rel="stylesheet" href="styles.css" />
+  <!-- KaTeX: typeset the derivation formulas like a physics textbook -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
   <!-- importmap: zero-build, load Three.js (with addons) from CDN -->
   <script type="importmap">
   {
@@ -23,7 +27,7 @@
     <div class="landing-content">
       <div class="landing-badge">Real astronomical data · Three.js 3D</div>
       <h1 class="landing-title">🌌 Cosmic Orbits</h1>
-      <p class="landing-sub">An interactive 3D atlas of the Solar System and our stellar neighborhood, driven by real NASA/JPL orbital data — watch planets trace true Keplerian orbits and place nearby stars in real 3D space.</p>
+      <p class="landing-sub">An interactive 3D atlas of the Solar System and our stellar neighborhood, built on real NASA/JPL orbital data. Watch the planets trace true Keplerian ellipses in real time, and see the nearest stars set at their actual distances in three-dimensional space.</p>
       <ul class="landing-features">
         <li>🪐 Real-time Keplerian orbits</li>
         <li>🛰 NASA imagery textures</li>

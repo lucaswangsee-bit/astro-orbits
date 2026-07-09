@@ -33,11 +33,13 @@ export const SUN = {
     'Light takes about 8 min 20 s to reach Earth',
     'Has sunspots, flares and coronal mass ejections on an ~11-year activity cycle'
   ],
-  blurb: 'The Sun is the absolute center of the Solar System, a medium-sized yellow dwarf star. It supplies nearly all the energy for life on Earth, and its gravity shapes every planetary orbit.',
+  blurb: 'The Sun is a G-type yellow dwarf and the gravitational anchor of the Solar System, holding 99.86% of its total mass. Hydrogen fusion in its core supplies virtually all the energy that sustains life on Earth, and its gravity governs every planetary orbit.',
   mechanics: {
     orbit: 'The Sun sits at the Solar System’s barycenter, so it does not orbit anything inside the system — instead every planet position in this simulation is computed relative to it (it is fixed at the origin). On a far larger scale it does orbit the center of the Milky Way, one lap every ~230 million years at about 220 km/s.',
+    massKg: 1.989e30, radiusM: 6.96e8,
     gValue: 'Surface gravity g ≈ 274 m/s² (about 28 × Earth)',
-    gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 1.989×10³⁰) / (6.96×10⁸)² ≈ 274 m/s²  — using the Sun’s mass and photospheric radius.'
+    gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(1.989\times10^{30}\,\mathrm{kg})}{(6.96\times10^{8}\,\mathrm{m})^2} \approx 274\,\mathrm{m/s^2}`,
+    gNote: 'Using the Sun’s mass and photospheric radius.'
   }
 };
 
@@ -60,11 +62,13 @@ export const PLANETS = [
       'High orbital eccentricity (0.206) gives it a markedly elliptical orbit',
       'Surface is covered in craters, much like the Moon'
     ],
-    blurb: 'Mercury is the innermost and smallest planet. With almost no atmosphere to retain heat, it scorches by day and freezes by night.',
+    blurb: 'Mercury is the innermost and smallest planet. With almost no atmosphere to trap or redistribute heat, its surface ranges from about 430 °C in daylight to −170 °C at night — one of the most extreme day–night temperature swings of any planet.',
     mechanics: {
-      orbit: 'Position comes from the JPL J2000 Keplerian elements (a = 0.387 AU, e = 0.206). Each frame the six elements are propagated to the date, the mean anomaly M = L − ϖ is formed, and Kepler’s equation M = E − e·sin E is solved for the eccentric anomaly E by Newton iteration; then r = a(1 − e·cos E). Its large eccentricity makes the ellipse the most pronounced of any planet, and its perihelion precesses an extra 43″ per century beyond Newton — a famous confirmation of general relativity.',
+      orbit: String.raw`Position comes from the JPL J2000 Keplerian elements (a = 0.387 AU, e = 0.206). Each frame the six elements are propagated to the date, the mean anomaly \(M = L - \varpi\) is formed, and Kepler’s equation \(M = E - e\sin E\) is solved for the eccentric anomaly E by Newton iteration; then \(r = a(1 - e\cos E)\). Its large eccentricity makes the ellipse the most pronounced of any planet, and its perihelion precesses an extra 43″ per century beyond Newton — a famous confirmation of general relativity.`,
+      massKg: 3.30e23, radiusM: 2.44e6, albedo: 0.068,
       gValue: 'Surface gravity g ≈ 3.70 m/s² (about 0.38 g)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 3.30×10²³) / (2.44×10⁶)² ≈ 3.70 m/s²  — mass M and radius R of Mercury, G the gravitational constant.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(3.30\times10^{23}\,\mathrm{kg})}{(2.44\times10^{6}\,\mathrm{m})^2} \approx 3.70\,\mathrm{m/s^2}`,
+      gNote: 'Mass M and radius R of Mercury; G is the gravitational constant.'
     }
   },
   {
@@ -84,11 +88,13 @@ export const PLANETS = [
       'Surface pressure is over 90× Earth’s, under perpetual sulfuric-acid clouds',
       'Similar in size to Earth, earning it the name "Earth’s sister planet"'
     ],
-    blurb: 'Venus is close to Earth in size, yet an extreme greenhouse effect has turned it into an inferno: a heavy carbon-dioxide atmosphere traps heat so tightly the surface could melt lead.',
+    blurb: 'Venus is nearly Earth’s twin in size, yet a runaway greenhouse effect has made it the hottest planet in the Solar System: a dense carbon-dioxide atmosphere holds the surface near 465 °C — hot enough to melt lead — under a pressure more than 90 times Earth’s.',
     mechanics: {
-      orbit: 'The same JPL J2000 Kepler solver is used (a = 0.723 AU). With e = 0.0068 its orbit is the most nearly circular of any planet, so the eccentric anomaly E barely differs from the mean anomaly M and the Newton iteration of M = E − e·sin E converges almost immediately; r = a(1 − e·cos E) stays very close to a throughout.',
+      orbit: String.raw`The same JPL J2000 Kepler solver is used (a = 0.723 AU). With e = 0.0068 its orbit is the most nearly circular of any planet, so the eccentric anomaly E barely differs from the mean anomaly M and the Newton iteration of \(M = E - e\sin E\) converges almost immediately; \(r = a(1 - e\cos E)\) stays very close to a throughout.`,
+      massKg: 4.87e24, radiusM: 6.05e6, albedo: 0.77,
       gValue: 'Surface gravity g ≈ 8.87 m/s² (about 0.90 g)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 4.87×10²⁴) / (6.05×10⁶)² ≈ 8.87 m/s²  — nearly Earth-like because its mass and radius are close to Earth’s.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(4.87\times10^{24}\,\mathrm{kg})}{(6.05\times10^{6}\,\mathrm{m})^2} \approx 8.87\,\mathrm{m/s^2}`,
+      gNote: 'Nearly Earth-like, because its mass and radius are close to Earth’s.'
     }
   },
   {
@@ -113,9 +119,11 @@ export const PLANETS = [
     ],
     blurb: 'Earth is our home and the only body confirmed to harbor life. Liquid water, a breathable atmosphere, a stable magnetic field, and just the right distance from the Sun together make this blue planet uniquely habitable.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a ≡ 1.000 AU, e = 0.0167), the orbit that defines the astronomical unit itself. Kepler’s equation M = E − e·sin E is solved by Newton iteration, then in-plane coordinates x = a(cos E − e), y = a√(1−e²)·sin E are rotated into the J2000 ecliptic frame. The small eccentricity is why the seasons differ slightly in length (perihelion falls in early January).',
+      orbit: String.raw`Solved from the JPL J2000 elements (a ≡ 1.000 AU, e = 0.0167), the orbit that defines the astronomical unit itself. Kepler’s equation \(M = E - e\sin E\) is solved by Newton iteration, then in-plane coordinates \(x = a(\cos E - e),\ y = a\sqrt{1-e^2}\,\sin E\) are rotated into the J2000 ecliptic frame. The small eccentricity is why the seasons differ slightly in length (perihelion falls in early January).`,
+      massKg: 5.97e24, radiusM: 6.371e6, albedo: 0.306,
       gValue: 'Surface gravity g ≈ 9.81 m/s² (1 g, the reference)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 5.97×10²⁴) / (6.371×10⁶)² ≈ 9.81 m/s²  — the standard against which every other value here is compared.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(5.97\times10^{24}\,\mathrm{kg})}{(6.371\times10^{6}\,\mathrm{m})^2} \approx 9.81\,\mathrm{m/s^2}`,
+      gNote: 'The standard against which every other value here is compared.'
     }
   },
   {
@@ -138,9 +146,11 @@ export const PLANETS = [
     ],
     blurb: 'Mars is a cold, dry red desert world, yet geologically the most Earth-like of the planets. Ancient valleys and subsurface ice make it the top candidate for finding past life and for future settlement.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a = 1.524 AU, e = 0.0934). It was Mars’s comparatively large eccentricity that let Kepler deduce, from Tycho Brahe’s data, that orbits are ellipses rather than circles — the very relation M = E − e·sin E this simulation solves each frame to place the planet.',
+      orbit: String.raw`Solved from the JPL J2000 elements (a = 1.524 AU, e = 0.0934). It was Mars’s comparatively large eccentricity that let Kepler deduce, from Tycho Brahe’s data, that orbits are ellipses rather than circles — the very relation \(M = E - e\sin E\) this simulation solves each frame to place the planet.`,
+      massKg: 6.42e23, radiusM: 3.39e6, albedo: 0.25,
       gValue: 'Surface gravity g ≈ 3.72 m/s² (about 0.38 g)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 6.42×10²³) / (3.39×10⁶)² ≈ 3.72 m/s²  — despite Mars being larger than Mercury, their surface gravities are nearly identical.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(6.42\times10^{23}\,\mathrm{kg})}{(3.39\times10^{6}\,\mathrm{m})^2} \approx 3.72\,\mathrm{m/s^2}`,
+      gNote: 'Despite Mars being larger than Mercury, their surface gravities are nearly identical.'
     }
   },
   {
@@ -161,11 +171,13 @@ export const PLANETS = [
       'Its powerful gravity acts as a "Solar System vacuum cleaner," shielding inner planets from many comet impacts',
       'Its Galilean moon Europa may hide an ocean beneath its ice'
     ],
-    blurb: 'Jupiter is a gas giant and the gravitational heavyweight of the Solar System. Its Great Red Spot storm has raged for centuries, and its vast family of moons is like a miniature solar system of its own.',
+    blurb: 'Jupiter is a gas giant more massive than all the other planets combined. Its Great Red Spot — a storm wider than Earth — has churned for centuries, and its family of 95+ moons resembles a miniature solar system of its own.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a = 5.203 AU). Its period follows Kepler’s third law T = √(a³) ≈ 11.86 yr; each frame the eccentric anomaly E is found from Kepler’s equation and the in-plane position is rotated into the J2000 ecliptic. Being by far the most massive planet, Jupiter also perturbs every other orbit — a correction the per-century element rates partly absorb.',
+      orbit: String.raw`Solved from the JPL J2000 elements (a = 5.203 AU). Its period follows Kepler’s third law \(T = \sqrt{a^3}\) ≈ 11.86 yr; each frame the eccentric anomaly E is found from Kepler’s equation and the in-plane position is rotated into the J2000 ecliptic. Being by far the most massive planet, Jupiter also perturbs every other orbit — a correction the per-century element rates partly absorb.`,
+      massKg: 1.898e27, radiusM: 7.149e7, albedo: 0.503,
       gValue: 'Surface gravity g ≈ 24.79 m/s² (about 2.53 g, at the 1-bar cloud tops)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 1.898×10²⁷) / (7.149×10⁷)² ≈ 24.79 m/s²  — using the equatorial (1-bar) radius; there is no solid surface to stand on.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(1.898\times10^{27}\,\mathrm{kg})}{(7.149\times10^{7}\,\mathrm{m})^2} \approx 24.79\,\mathrm{m/s^2}`,
+      gNote: 'Uses the equatorial (1-bar) radius; there is no solid surface to stand on.'
     }
   },
   {
@@ -185,11 +197,13 @@ export const PLANETS = [
       'Its largest moon Titan has a thick atmosphere and liquid-methane lakes',
       'Its moon Enceladus vents water plumes from a subsurface ocean'
     ],
-    blurb: 'Saturn is famed for its dazzling rings, the jewel among the gas giants. Its moon Titan has a thick atmosphere and liquid lakes, making it a key object for studying the origins of life.',
+    blurb: 'Saturn is famed for its bright ring system, made of countless particles of ice and rock. Its largest moon, Titan, has a thick atmosphere and lakes of liquid methane, making it a key target in the study of the chemistry that precedes life.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a = 9.537 AU); Kepler’s third law gives T = √(a³) ≈ 29.4 yr. Because its semi-major axis drifts measurably, the elements carry a per-century rate that is applied before Kepler’s equation M = E − e·sin E is solved — the same Newton iteration used for every planet.',
+      orbit: String.raw`Solved from the JPL J2000 elements (a = 9.537 AU); Kepler’s third law gives \(T = \sqrt{a^3}\) ≈ 29.4 yr. Because its semi-major axis drifts measurably, the elements carry a per-century rate that is applied before Kepler’s equation \(M = E - e\sin E\) is solved — the same Newton iteration used for every planet.`,
+      massKg: 5.683e26, radiusM: 6.027e7, albedo: 0.342,
       gValue: 'Surface gravity g ≈ 10.44 m/s² (about 1.06 g, at the 1-bar level)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 5.683×10²⁶) / (6.027×10⁷)² ≈ 10.44 m/s²  — barely above Earth’s despite Saturn’s enormous size, because its density is less than water.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(5.683\times10^{26}\,\mathrm{kg})}{(6.027\times10^{7}\,\mathrm{m})^2} \approx 10.44\,\mathrm{m/s^2}`,
+      gNote: 'Barely above Earth’s despite Saturn’s enormous size, because its density is less than water.'
     }
   },
   {
@@ -211,9 +225,11 @@ export const PLANETS = [
     ],
     blurb: 'Uranus is an ice giant that rolls along on its side. Its unique axial tilt gives it the most extreme seasons in the Solar System, and its cyan-blue color comes from atmospheric methane.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a = 19.19 AU); Kepler’s third law gives T = √(a³) ≈ 84 yr. Discovered telescopically in 1781, its computed position stubbornly disagreed with observation — small residuals that betrayed an eighth planet tugging on it, and led directly to the discovery of Neptune.',
+      orbit: String.raw`Solved from the JPL J2000 elements (a = 19.19 AU); Kepler’s third law gives \(T = \sqrt{a^3}\) ≈ 84 yr. Discovered telescopically in 1781, its computed position stubbornly disagreed with observation — small residuals that betrayed an eighth planet tugging on it, and led directly to the discovery of Neptune.`,
+      massKg: 8.681e25, radiusM: 2.556e7, albedo: 0.300,
       gValue: 'Surface gravity g ≈ 8.87 m/s² (about 0.90 g, at the 1-bar level)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 8.681×10²⁵) / (2.556×10⁷)² ≈ 8.87 m/s²  — coincidentally almost the same as Venus, though Uranus is far larger and less dense.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(8.681\times10^{25}\,\mathrm{kg})}{(2.556\times10^{7}\,\mathrm{m})^2} \approx 8.87\,\mathrm{m/s^2}`,
+      gNote: 'Coincidentally almost the same as Venus, though Uranus is far larger and less dense.'
     }
   },
   {
@@ -235,9 +251,11 @@ export const PLANETS = [
     ],
     blurb: 'Neptune is the most distant major planet, a deep-blue, storm-lashed frozen world. It was the first planet humans "calculated" mathematically before finding it with a telescope.',
     mechanics: {
-      orbit: 'Solved from the JPL J2000 elements (a = 30.07 AU); Kepler’s third law gives T = √(a³) ≈ 165 yr. Neptune was found by running this logic backwards: the unexplained perturbations in Uranus’s orbit were fed into Newtonian gravity to predict where an unseen planet must be — and in 1846 it was spotted within a degree of the prediction.',
+      orbit: String.raw`Solved from the JPL J2000 elements (a = 30.07 AU); Kepler’s third law gives \(T = \sqrt{a^3}\) ≈ 165 yr. Neptune was found by running this logic backwards: the unexplained perturbations in Uranus’s orbit were fed into Newtonian gravity to predict where an unseen planet must be — and in 1846 it was spotted within a degree of the prediction.`,
+      massKg: 1.024e26, radiusM: 2.476e7, albedo: 0.290,
       gValue: 'Surface gravity g ≈ 11.15 m/s² (about 1.14 g, at the 1-bar level)',
-      gMethod: 'g = GM/R² = (6.674×10⁻¹¹ × 1.024×10²⁶) / (2.476×10⁷)² ≈ 11.15 m/s²  — the strongest surface gravity of any planet except Jupiter.'
+      gCalc: String.raw`g = \dfrac{GM}{R^2} = \dfrac{(6.674\times10^{-11}\,\mathrm{N\cdot m^2/kg^2})(1.024\times10^{26}\,\mathrm{kg})}{(2.476\times10^{7}\,\mathrm{m})^2} \approx 11.15\,\mathrm{m/s^2}`,
+      gNote: 'The strongest surface gravity of any planet except Jupiter.'
     }
   }
 ];
@@ -258,7 +276,7 @@ export const MOON = {
     'Its surface is covered in craters and "maria" — plains formed by ancient lava',
     'The only extraterrestrial body humans have set foot on (the Apollo program)'
   ],
-  blurb: 'The Moon is Earth’s faithful companion. It steadies Earth’s rotation axis, drives the tides, and is the only world beyond Earth that humans have walked on.'
+  blurb: 'The Moon is Earth’s only natural satellite. It stabilizes Earth’s axial tilt, drives the ocean tides, and remains the only world beyond Earth that humans have set foot on.'
 };
 
 // ---------------------------------------------------------------------------

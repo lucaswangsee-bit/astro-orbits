@@ -187,10 +187,25 @@ html, body {
 }
 .mech-note { font-size: 13px; line-height: 1.75; color: #c7d2ec; margin: 0 0 6px; }
 .mech-g { color: #7dffb0; font-weight: 600; }
+.const-tag {
+  display: inline-block; margin-left: 6px; padding: 1px 6px;
+  font-size: 10px; color: #7dffb0; letter-spacing: 0.3px;
+  background: rgba(125, 255, 176, 0.12); border-radius: 6px; vertical-align: middle;
+}
 .mech-formula {
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   font-size: 11.5px; line-height: 1.6; color: #dbe4f7;
 }
+
+/* KaTeX-typeset standard formulas */
+.formula-block {
+  margin: 4px 0 12px; padding: 8px 4px;
+  text-align: center; overflow-x: auto; overflow-y: hidden;
+  color: #eaf1ff;
+}
+.formula-block .katex { font-size: 1.15em; }
+.formula-block.sm { margin: 2px 0 8px; padding: 4px; }
+.formula-block.sm .katex { font-size: 1em; }
 
 .focus-btn {
   margin-top: 16px; width: 100%;
