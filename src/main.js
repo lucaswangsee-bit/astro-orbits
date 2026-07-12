@@ -8,7 +8,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 import {
   heliocentricPosition, orbitPath, moonOffset, julianDate,
-  orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S
+  orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S, ephemeris
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
@@ -699,9 +699,56 @@ function buildEvents() {
 }
 eventsBtn.onclick = () => {
   if (!eventsBuilt) buildEvents();
+  ephemPanel.classList.remove('visible');
   eventsPanel.classList.toggle('visible');
 };
 document.getElementById('eventsClose').onclick = () => eventsPanel.classList.remove('visible');
+
+// ---------------------------------------------------------------------------
+//  Ephemeris panel — date + body → apparent geocentric RA / Dec
+// ---------------------------------------------------------------------------
+const ephemBtn = document.getElementById('ephemBtn');
+const ephemPanel = document.getElementById('ephemPanel');
+const ephemBody = document.getElementById('ephemBody');
+const ephemDate = document.getElementById('ephemDate');
+const ephemResult = document.getElementById('ephemResult');
+const EPHEM_BODIES = [
+  ['sun', '☉ Sun'], ['mercury', '☿ Mercury'], ['venus', '♀ Venus'], ['mars', '♂ Mars'],
+  ['jupiter', '♃ Jupiter'], ['saturn', '♄ Saturn'], ['uranus', '♅ Uranus'], ['neptune', '♆ Neptune']
+];
+let ephemInit = false;
+
+function initEphem() {
+  ephemBody.innerHTML = EPHEM_BODIES.map(([k, n]) => `<option value="${k}">${n}</option>`).join('');
+  ephemBody.value = 'mars';
+  ephemDate.value = new Date().toISOString().slice(0, 10);
+  ephemInit = true;
+}
+
+function runEphem() {
+  const key = ephemBody.value;
+  const iso = ephemDate.value || new Date().toISOString().slice(0, 10);
+  const e = ephemeris(key, new Date(iso + 'T00:00:00Z'));
+  const name = (EPHEM_BODIES.find(b => b[0] === key) || [key, key])[1];
+  ephemResult.innerHTML = `
+    <div class="ephem-out">
+      <div class="ephem-row"><span>Right ascension</span><strong>${e.raStr}</strong></div>
+      <div class="ephem-row"><span>Declination</span><strong>${e.decStr}</strong></div>
+      <div class="ephem-row"><span>Distance from Earth</span><strong>${e.distAU.toFixed(3)} AU</strong></div>
+      <p class="ephem-hint">${name} · ${iso} · geocentric equatorial (J2000)</p>
+    </div>`;
+}
+
+ephemBtn.onclick = () => {
+  if (!ephemInit) initEphem();
+  eventsPanel.classList.remove('visible');
+  const showing = ephemPanel.classList.toggle('visible');
+  if (showing) runEphem();
+};
+document.getElementById('ephemClose').onclick = () => ephemPanel.classList.remove('visible');
+document.getElementById('ephemGo').onclick = runEphem;
+ephemBody.onchange = runEphem;
+ephemDate.onchange = runEphem;
 
 updateSpeedLabel();
 rebuildChips();

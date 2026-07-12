@@ -74,6 +74,7 @@
       <div class="row">
         <label class="checkbox"><input type="checkbox" id="orbitsToggle" checked /> Orbit lines</label>
         <button id="eventsBtn" class="mini-btn">🔭 Sky events</button>
+        <button id="ephemBtn" class="mini-btn">🛰 Ephemeris</button>
       </div>
       <div class="row toggles-row">
         <label class="checkbox"><input type="checkbox" id="sweepToggle" checked /> ⟠ Kepler sweep</label>
@@ -95,6 +96,25 @@
     </div>
     <p class="ev-note">Computed from real orbital data · click to jump to that date</p>
     <ul id="eventsList"></ul>
+  </aside>
+
+  <!-- Ephemeris panel: date + body → apparent RA / Dec as seen from Earth -->
+  <aside id="ephemPanel">
+    <div class="ev-head">
+      <h2>🛰 Ephemeris · RA / Dec</h2>
+      <button id="ephemClose">✕</button>
+    </div>
+    <p class="ev-note">Where a body appears in Earth's sky, from real orbital elements — the same coordinates you measure to determine an orbit.</p>
+    <div class="ephem-form">
+      <label>Body
+        <select id="ephemBody"></select>
+      </label>
+      <label>Date (UTC)
+        <input type="date" id="ephemDate" />
+      </label>
+      <button id="ephemGo" class="mini-btn">Compute</button>
+    </div>
+    <div id="ephemResult"></div>
   </aside>
 
   <!-- Second layer: orbit/position + gravity derivation (modal overlay) -->

@@ -133,6 +133,55 @@ export function heliocentricPosition(key, jd) {
 }
 
 // ---------------------------------------------------------------------------
+//  Ephemeris — apparent geocentric equatorial position (RA / Dec) of a body,
+//  as it would appear in Earth's sky on a given date. This is the "forward"
+//  companion to orbit determination: given the orbital elements, predict where
+//  the object shows up on the sky. (RA in hours, Dec in degrees.)
+//    target_geo = r_helio(target) - r_helio(Earth)      [ecliptic]
+//    then rotate ecliptic -> equatorial by the obliquity ε, and read off
+//    RA = atan2(y, x),  Dec = asin(z / |r|).
+//  Pass key 'sun' for the Sun (its geocentric vector is simply -Earth).
+// ---------------------------------------------------------------------------
+const OBLIQUITY = 23.43929 * DEG;   // mean obliquity of the ecliptic (J2000)
+
+function formatRA(hours) {
+  const total = Math.round((((hours % 24) + 24) % 24) * 3600); // seconds of RA
+  const h = Math.floor(total / 3600) % 24;
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+}
+
+function formatDec(deg) {
+  const sign = deg < 0 ? '−' : '+';
+  const total = Math.round(Math.abs(deg) * 3600);             // arcseconds
+  const d = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  return `${sign}${d}° ${String(m).padStart(2, '0')}′ ${String(s).padStart(2, '0')}″`;
+}
+
+export function ephemeris(key, date) {
+  const jd = julianDate(date);
+  const target = key === 'sun' ? { x: 0, y: 0, z: 0 } : heliocentricPosition(key, jd);
+  const earth  = heliocentricPosition('earth', jd);
+  // Geocentric ecliptic vector (Earth → target), in AU
+  const xe = target.x - earth.x;
+  const ye = target.y - earth.y;
+  const ze = target.z - earth.z;
+  // Rotate ecliptic → equatorial about the x-axis by the obliquity ε
+  const c = Math.cos(OBLIQUITY), s = Math.sin(OBLIQUITY);
+  const xq = xe;
+  const yq = ye * c - ze * s;
+  const zq = ye * s + ze * c;
+  const dist = Math.sqrt(xq * xq + yq * yq + zq * zq);
+  let raHours = Math.atan2(yq, xq) / DEG / 15;   // radians → degrees → hours
+  raHours = ((raHours % 24) + 24) % 24;
+  const decDeg = Math.asin(zq / dist) / DEG;
+  return { raHours, decDeg, distAU: dist, raStr: formatRA(raHours), decStr: formatDec(decDeg) };
+}
+
+// ---------------------------------------------------------------------------
 //  Sample the full orbit (to draw the elliptical orbit line), units: AU
 //  Uses the instantaneous elements at the current jd, sampling one full loop
 //  uniformly in eccentric anomaly E
