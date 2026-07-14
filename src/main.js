@@ -8,7 +8,8 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 import {
   heliocentricPosition, orbitPath, moonOffset, julianDate,
-  orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S, ephemeris
+  orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S, ephemeris,
+  orbitalElements
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
@@ -500,6 +501,7 @@ function openDerivation(data) {
     : String.raw`$$g = \frac{GM}{R^2}$$`;
   const isPlanet = data.type === 'planet';
   const dyn = isPlanet ? orbitalDynamics(data.key, julianDate(state.simDate)) : null;
+  const el = isPlanet ? orbitalElements(data.key, julianDate(state.simDate)) : null;
   const lawFormula = String.raw`$$T = 2\pi\sqrt{\tfrac{a^3}{GM}}\qquad \varepsilon = -\frac{GM}{2a}\qquad h = \sqrt{GM\,a(1-e^2)}\qquad \frac{dA}{dt}=\frac{h}{2}$$`;
   // Derived reference quantities (Solar-System bodies carry mass/radius; planets also albedo)
   let vEsc, vOrb, rho, teq = null;
@@ -525,6 +527,29 @@ function openDerivation(data) {
       <div class="formula-block">${posFormula}</div>
       <p class="mech-note">${m.orbit}</p>
     </div>
+    ${isPlanet && el ? `
+    <div class="derive-section">
+      <h3>Orbit from its six elements</h3>
+      <p class="mech-note">The six Keplerian elements <b>a, e, i, Ω, ω, M</b> fully fix the orbit. The position at any moment follows in four steps — the same forward model an orbit determination is checked against. The formulas are general; the numbers below are ${data.nameZh}'s real J2000 elements.</p>
+      <ol class="six-steps">
+        <li><span class="six-lbl">① Mean anomaly grows uniformly with time</span>
+          <div class="formula-block">$$M = M_0 + n\\,(t-t_0),\\qquad n=\\sqrt{\\tfrac{GM}{a^{3}}}$$</div></li>
+        <li><span class="six-lbl">② Solve Kepler's equation for E (Newton–Raphson)</span>
+          <div class="formula-block">$$M = E - e\\sin E,\\qquad E_{k+1}=E_k-\\dfrac{E_k-e\\sin E_k-M}{1-e\\cos E_k}$$</div></li>
+        <li><span class="six-lbl">③ Coordinates in the orbital plane</span>
+          <div class="formula-block">$$x'=a(\\cos E-e),\\quad y'=a\\sqrt{1-e^{2}}\\,\\sin E,\\quad r=a(1-e\\cos E)$$</div></li>
+        <li><span class="six-lbl">④ Rotate into 3D space by ω, i, Ω</span>
+          <div class="formula-block">$$\\mathbf{r}=R_z(\\Omega)\\,R_x(i)\\,R_z(\\omega)\\begin{bmatrix}x'\\\\ y'\\\\ 0\\end{bmatrix}$$</div></li>
+      </ol>
+      <table class="facts">
+        <tr><td>a · semi-major axis</td><td class="mech-g">${el.a.toFixed(4)} AU</td></tr>
+        <tr><td>e · eccentricity</td><td>${el.e.toFixed(5)}</td></tr>
+        <tr><td>i · inclination</td><td>${el.i.toFixed(3)}°</td></tr>
+        <tr><td>Ω · longitude of ascending node</td><td>${el.node.toFixed(2)}°</td></tr>
+        <tr><td>ω · argument of perihelion</td><td>${el.omega.toFixed(2)}°</td></tr>
+        <tr><td>M · mean anomaly (at shown date)</td><td class="mech-g">${el.M.toFixed(2)}°</td></tr>
+      </table>
+    </div>` : ''}
     ${isPlanet ? `
     <div class="derive-section">
       <h3>Conservation &amp; orbital laws</h3>

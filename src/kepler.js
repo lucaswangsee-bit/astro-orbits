@@ -182,6 +182,26 @@ export function ephemeris(key, date) {
 }
 
 // ---------------------------------------------------------------------------
+//  The six Keplerian elements of a planet at a given time, in display units
+//  (a in AU, all angles in degrees). ω = ϖ − Ω, M = L − ϖ.
+// ---------------------------------------------------------------------------
+export function orbitalElements(key, jd) {
+  const T = (jd - 2451545.0) / 36525;
+  const { a, e, I, L, peri, node } = elementsAt(key, T);   // angles in radians
+  const TWO_PI = 2 * Math.PI;
+  const deg360 = r => (((r % TWO_PI) + TWO_PI) % TWO_PI) / DEG;
+  return {
+    a, e,
+    i:    I / DEG,          // inclination
+    node: deg360(node),     // Ω  ascending node
+    omega: deg360(peri - node), // ω  argument of perihelion
+    M:    deg360(L - peri), // mean anomaly (now)
+    L:    deg360(L),        // mean longitude
+    peri: deg360(peri)      // ϖ  longitude of perihelion
+  };
+}
+
+// ---------------------------------------------------------------------------
 //  Sample the full orbit (to draw the elliptical orbit line), units: AU
 //  Uses the instantaneous elements at the current jd, sampling one full loop
 //  uniformly in eccentric anomaly E
