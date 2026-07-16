@@ -791,6 +791,7 @@ function enterApp(mode) {
   setMode(mode);
   landing.classList.add('hidden');
   setTimeout(() => { landing.style.display = 'none'; }, 800); // remove after fade-out
+  if (mode === 'solar') startTour();   // cinematic fly-through on first entry
 }
 document.getElementById('enterSolar').onclick = () => { enterApp('solar'); syncHash(); };
 document.getElementById('enterStars').onclick = () => { enterApp('stars'); syncHash(); };
@@ -883,6 +884,50 @@ applyRoute(parseHash(location.hash));   // initial deep-link restore
 // ---------------------------------------------------------------------------
 //  Render loop
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+//  Cinematic intro — a short auto flight the first time you enter the Solar
+//  System, so a new visitor gets an immediate "wow" instead of a static frame.
+//  Any interaction (drag / zoom / Skip) hands control straight back.
+// ---------------------------------------------------------------------------
+const tourHint = document.getElementById('tourHint');
+let tour = null;
+const TOUR_WP = [
+  { t: 0.00, pos: [0, 16, 50],     look: [0, 0, 0]    },
+  { t: 0.24, pos: [58, 28, 96],    look: [8, 0, 4]    },
+  { t: 0.48, pos: [122, 96, 26],   look: [0, 0, 0]    },
+  { t: 0.74, pos: [-150, 76, 206], look: [-45, 0, 56] },
+  { t: 1.00, pos: [0, 158, 320],   look: [0, 0, 0]    }
+];
+const _twa = new THREE.Vector3(), _twb = new THREE.Vector3();
+const _tla = new THREE.Vector3(), _tlb = new THREE.Vector3();
+const smoothstep = x => x * x * (3 - 2 * x);
+
+function startTour() {
+  tour = { start: performance.now(), dur: 17000 };
+  if (tourHint) tourHint.classList.add('visible');
+}
+function endTour() {
+  if (!tour) return;
+  tour = null;
+  if (tourHint) tourHint.classList.remove('visible');
+}
+function updateTour(now) {
+  const p = Math.min(1, (now - tour.start) / tour.dur);
+  let i = 0;
+  while (i < TOUR_WP.length - 2 && p > TOUR_WP[i + 1].t) i++;
+  const a = TOUR_WP[i], b = TOUR_WP[i + 1];
+  const lt = smoothstep((p - a.t) / (b.t - a.t || 1));
+  camera.position.copy(_twa.fromArray(a.pos).lerp(_twb.fromArray(b.pos), lt));
+  controls.target.copy(_tla.fromArray(a.look).lerp(_tlb.fromArray(b.look), lt));
+  if (p >= 1) endTour();
+}
+// Any user gesture cancels the flight and returns full control.
+controls.addEventListener('start', endTour);
+renderer.domElement.addEventListener('pointerdown', endTour);
+renderer.domElement.addEventListener('wheel', endTour, { passive: true });
+const _tourSkip = document.getElementById('tourSkip');
+if (_tourSkip) _tourSkip.onclick = endTour;
+
 let lastT = performance.now();
 function animate() {
   requestAnimationFrame(animate);
@@ -908,6 +953,8 @@ function animate() {
     updatePositions();
     updateLivePhysics(julianDate(state.simDate));
   }
+
+  if (tour) updateTour(now);
 
   if (focusTarget) {
     const target = focusTarget.getWorldPosition(new THREE.Vector3());
