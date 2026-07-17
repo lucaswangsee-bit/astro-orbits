@@ -9,7 +9,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 import {
   heliocentricPosition, orbitPath, moonOffset, julianDate,
   orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S, ephemeris,
-  orbitalElements
+  orbitalElements, GM_SUN
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS, ASTEROIDS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
@@ -486,6 +486,8 @@ function showInfo(data) {
       <tr><td>At aphelion (slowest)</td><td><span id="lpVa">—</span></td></tr>
       <tr><td>True anomaly ν</td><td><span id="lpNu">—</span></td></tr>
       <tr><td>Escape speed (here)</td><td><span id="lpVesc">—</span></td></tr>
+      <tr class="lp-try"><td>Try a speed here</td><td><input type="number" id="lpInput" class="lp-input" step="1" min="0" placeholder="km/s" /> km/s</td></tr>
+      <tr><td>→ Orbit it would give</td><td><span id="lpCalc" class="lp-val">—</span></td></tr>
     </table>` : ''}
     <h3>Notable features</h3><ul class="highlights">${highlights}</ul>
     <h3>Key data</h3><table class="facts">${facts}</table>
@@ -495,6 +497,37 @@ function showInfo(data) {
   renderMath(infoEl);
   const db = document.getElementById('deriveBtn');
   if (db) db.onclick = () => openDerivation(data);
+
+  // Vis-viva sandbox: type a speed → invert v² = GM(2/r − 1/a) at the planet's
+  // current Sun distance r to get the orbit (semi-major axis, period) that speed
+  // would produce — or flag it as unbound if it exceeds escape speed.
+  const lpIn = document.getElementById('lpInput');
+  if (lpIn) {
+    const runVisViva = () => {
+      const out = document.getElementById('lpCalc');
+      const k = state.selectedKey;
+      if (!out || !k) return;
+      const s = orbitalSpeeds(k, julianDate(state.simDate));   // uses current r
+      const kms = parseFloat(lpIn.value);
+      if (!isFinite(kms) || kms <= 0) { out.textContent = '—'; return; }
+      const vAUday = kms / AU_DAY_TO_KM_S;
+      const invA = 2 / s.r - (vAUday * vAUday) / GM_SUN;       // 1/a
+      const vEsc = Math.sqrt(2 * GM_SUN / s.r) * AU_DAY_TO_KM_S;
+      if (invA <= 1e-9) {
+        out.innerHTML = `<span class="lp-unbound">unbound — escapes the Sun</span> <span class="lp-cmp">(v ≥ v_esc ≈ ${vEsc.toFixed(1)} km/s)</span>`;
+        return;
+      }
+      const aNew = 1 / invA;                                   // AU
+      const periodYr = 2 * Math.PI * Math.sqrt(aNew ** 3 / GM_SUN) / 365.25;
+      const cmp = aNew > s.a * 1.001 ? 'wider orbit' : (aNew < s.a * 0.999 ? 'tighter orbit' : 'same as now');
+      out.innerHTML = `a = <b>${aNew.toFixed(3)} AU</b> · period ${periodYr.toFixed(2)} yr <span class="lp-cmp">(${cmp})</span>`;
+    };
+    lpIn.oninput = runVisViva;
+    // Start from the planet's real current speed so it lands on the true orbit
+    const s0 = orbitalSpeeds(data.key, julianDate(state.simDate));
+    lpIn.value = (s0.v * AU_DAY_TO_KM_S).toFixed(1);
+    runVisViva();
+  }
 }
 
 // Is this object a star? (stars carry a spectral type; the Sun is a star too)

@@ -286,6 +286,16 @@ html, body {
 .six-steps li { margin-bottom: 10px; }
 .six-lbl { display: block; font-size: 12.5px; color: var(--text-dim); margin-bottom: 3px; }
 
+/* Vis-viva "try a speed" input */
+.lp-input {
+  width: 74px; background: rgba(255, 255, 255, 0.08); color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: 6px; padding: 3px 6px;
+  font-size: 12px; font-variant-numeric: tabular-nums;
+}
+.lp-try td { padding-top: 8px; }
+.lp-unbound { color: #ff9d6e; font-weight: 500; }
+.lp-cmp { color: var(--text-dim); font-size: 11px; }
+
 /* ---- Bottom hints ---- */
 #hint {
   position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
