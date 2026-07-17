@@ -51,6 +51,7 @@ html, body {
 .label-star { color: #ffd873; font-weight: 700; }
 .label-planet { color: #cfe0ff; }
 .label-comet { color: #8ff0e0; font-style: italic; }
+.label-asteroid { color: #d8c9a8; font-size: 11px; }
 .label-ring { color: #5f7fb0; font-size: 10px; }
 
 /* ---- Control panel (bottom-left) ---- */

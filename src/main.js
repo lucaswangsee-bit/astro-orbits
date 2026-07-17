@@ -11,7 +11,7 @@ import {
   orbitalSpeeds, orbitalDynamics, cometPosition, cometOrbitPath, AU_DAY_TO_KM_S, ephemeris,
   orbitalElements
 } from './kepler.js';
-import { SUN, PLANETS, MOON, COMETS } from './bodies.js';
+import { SUN, PLANETS, MOON, COMETS, ASTEROIDS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
 
@@ -206,6 +206,36 @@ for (const c of COMETS) {
   cometRigs.push({ data: c, mesh, ionTail, dustTail, orbitLine, orbitPtsAU });
 }
 
+// ---------------------------------------------------------------------------
+//  Asteroids — real minor planets (Ceres, Vesta, Eros, Apophis …) solved from
+//  JPL orbital elements with the same 6-element engine as comets. Rendered as a
+//  small body + faint halo + orbit line; fully click-to-select and focusable.
+// ---------------------------------------------------------------------------
+const asteroidRigs = [];
+for (const c of ASTEROIDS) {
+  const mesh = new THREE.Mesh(
+    new THREE.SphereGeometry(c.displaySize, 20, 20),
+    new THREE.MeshBasicMaterial({ color: c.color })
+  );
+  mesh.userData.body = c;
+  mesh.add(new THREE.Mesh(   // faint halo so small bodies stay visible
+    new THREE.SphereGeometry(c.displaySize * 2.2, 12, 12),
+    new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })
+  ));
+  mesh.add(makeLabel(c.nameZh, 'label-asteroid', c.displaySize + 0.7));
+  solarGroup.add(mesh);
+  bodyMeshes[c.key] = mesh;
+  clickableBodies.push(mesh);
+
+  const orbitPtsAU = cometOrbitPath(c);   // generic Keplerian 6-element solver
+  const orbitLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(orbitPtsAU.map(toScene)),
+    new THREE.LineBasicMaterial({ color: c.color, transparent: true, opacity: 0.32 })
+  );
+  solarGroup.add(orbitLine);
+  asteroidRigs.push({ data: c, mesh, orbitLine, orbitPtsAU });
+}
+
 // Orbit lines
 const orbitLines = {};
 function buildOrbitLine(key, jd) {
@@ -233,6 +263,9 @@ function refreshOrbits() {
 // frame while the compact/real distance morph is in progress.
 function rebuildCometOrbits() {
   for (const rig of cometRigs) {
+    rig.orbitLine.geometry.setFromPoints(rig.orbitPtsAU.map(toScene));
+  }
+  for (const rig of asteroidRigs) {
     rig.orbitLine.geometry.setFromPoints(rig.orbitPtsAU.map(toScene));
   }
 }
@@ -349,6 +382,12 @@ function updatePositions() {
   const e = heliocentricPosition('earth', jd), off = moonOffset(jd), MV = 60;
   bodyMeshes.moon.position.copy(toScene({ x: e.x + off.x * MV, y: e.y + off.y * MV, z: e.z + off.z * MV }));
 
+  // Asteroids: position + orbit-line visibility (no tails)
+  for (const rig of asteroidRigs) {
+    rig.mesh.position.copy(toScene(cometPosition(rig.data, jd)));
+    rig.orbitLine.visible = state.showOrbits;
+  }
+
   // Comets: position, then re-aim both tails anti-sunward (grow near perihelion)
   for (const rig of cometRigs) {
     const c = rig.data;
@@ -423,7 +462,7 @@ function onPointerDown(e) {
 const infoEl = document.getElementById('info');
 function typeName(obj) {
   if (obj.spectral) return 'Star · ' + obj.spectral;
-  return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet' }[obj.type] || obj.type;
+  return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet', asteroid: 'Asteroid' }[obj.type] || obj.type;
 }
 function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMeshes[obj.key] || null; showInfo(obj); focusOn(obj.key); syncHash(); }
 function showInfo(data) {
@@ -649,7 +688,7 @@ document.getElementById('followToggle').addEventListener('change', e => { state.
 // Quick-select chips for bodies / stars (rebuilt on mode switch)
 function rebuildChips() {
   bodyListEl.innerHTML = '';
-  const list = state.mode === 'solar' ? [SUN, ...PLANETS, MOON, ...COMETS] : starData;
+  const list = state.mode === 'solar' ? [SUN, ...PLANETS, MOON, ...ASTEROIDS, ...COMETS] : starData;
   for (const b of list) {
     const color = (b.color || 0xffffff).toString(16).padStart(6, '0');
     const btn = document.createElement('button');

@@ -328,5 +328,129 @@ export const COMETS = [
   }
 ];
 
+// ---------------------------------------------------------------------------
+//  Asteroids — real minor planets from JPL Small-Body Database (full-precision
+//  osculating elements). Same 6-element convention as comets:
+//    a (AU), e, I (°), argp = ω (°), node = Ω (°), tperi (JD), period (days).
+//  These are the kind of bodies orbit-determination (e.g. SSP) is done on.
+// ---------------------------------------------------------------------------
+export const ASTEROIDS = [
+  {
+    key: 'ceres', nameZh: 'Ceres', nameEn: '1 Ceres', type: 'asteroid',
+    color: 0xb9ad9c, displaySize: 0.55,
+    a: 2.765552595034094, e: 0.07969229514816586, I: 10.58802780183462,
+    argp: 73.29421453021587, node: 80.24862682043221,
+    tperi: 2461599.841466614066, period: 1679.853119758983,
+    facts: {
+      'Semi-major axis a': '2.7656 AU', 'Eccentricity e': '0.0797',
+      'Inclination i': '10.59°', 'Ascending node Ω': '80.25°',
+      'Arg. of perihelion ω': '73.29°', 'Orbital period': '4.60 yr',
+      'Diameter': '939 km (largest in the belt)', 'Rotation': '9.07 h'
+    },
+    highlights: [
+      'The largest object in the asteroid belt — and a dwarf planet',
+      'Holds ~25% of the entire belt’s mass; round under its own gravity',
+      'Visited by NASA’s Dawn (2015–2018); has water-ice and bright salt deposits',
+      'Discovered 1801 — the first asteroid ever found'
+    ],
+    blurb: 'Ceres is the largest body in the main asteroid belt and the only dwarf planet in the inner Solar System. Rounded by its own gravity, it hides water ice beneath a battered crust and shows bright carbonate salt patches that NASA’s Dawn mapped up close.'
+  },
+  {
+    key: 'vesta', nameZh: 'Vesta', nameEn: '4 Vesta', type: 'asteroid',
+    color: 0xe0d6a8, displaySize: 0.46,
+    a: 2.361365965127599, e: 0.09020374382834395, I: 7.143925545058711,
+    argp: 151.4686478221564, node: 103.701293265032,
+    tperi: 2460901.587379842988, period: 1325.389042911101,
+    facts: {
+      'Semi-major axis a': '2.3614 AU', 'Eccentricity e': '0.0902',
+      'Inclination i': '7.14°', 'Ascending node Ω': '103.70°',
+      'Arg. of perihelion ω': '151.47°', 'Orbital period': '3.63 yr',
+      'Diameter': '525 km', 'Rotation': '5.34 h'
+    },
+    highlights: [
+      'The brightest asteroid — occasionally visible to the naked eye',
+      'Second-most-massive after Ceres; also visited by Dawn (2011–2012)',
+      'A giant south-pole impact flung out debris that reaches Earth as HED meteorites'
+    ],
+    blurb: 'Vesta is the brightest asteroid and the second-most-massive, a differentiated protoplanet with a basaltic crust. A colossal impact near its south pole blasted out fragments — some of which fall to Earth as meteorites we can hold.'
+  },
+  {
+    key: 'pallas', nameZh: 'Pallas', nameEn: '2 Pallas', type: 'asteroid',
+    color: 0x9fb4bf, displaySize: 0.44,
+    a: 2.769559010737709, e: 0.2307000995648547, I: 34.93279321851542,
+    argp: 310.9699161652136, node: 172.8866193357694,
+    tperi: 2461695.031164382680, period: 1683.504809564834,
+    facts: {
+      'Semi-major axis a': '2.7696 AU', 'Eccentricity e': '0.2307',
+      'Inclination i': '34.93° (very steep)', 'Ascending node Ω': '172.89°',
+      'Arg. of perihelion ω': '310.97°', 'Orbital period': '4.61 yr',
+      'Diameter': '513 km', 'Rotation': '7.81 h'
+    },
+    highlights: [
+      'Third-largest asteroid, with an unusually steep 35° orbital tilt',
+      'That high inclination makes it hard to reach — never visited by a spacecraft',
+      'Discovered 1802, the second asteroid found'
+    ],
+    blurb: 'Pallas is the third-largest asteroid and the most steeply tilted of the big ones — its 35° inclination carries it far above and below the plane of the planets, which is exactly why no mission has ever gone there.'
+  },
+  {
+    key: 'eros', nameZh: 'Eros', nameEn: '433 Eros', type: 'asteroid',
+    color: 0xc79366, displaySize: 0.30,
+    a: 1.458243716760167, e: 0.2228779627700761, I: 10.82854410314273,
+    argp: 178.9181319135911, node: 304.2679713350896,
+    tperi: 2461088.813494039683, period: 643.1963890927677,
+    facts: {
+      'Semi-major axis a': '1.4582 AU', 'Eccentricity e': '0.2229',
+      'Inclination i': '10.83°', 'Ascending node Ω': '304.27°',
+      'Arg. of perihelion ω': '178.92°', 'Orbital period': '1.76 yr',
+      'Diameter': '~17 km (elongated)', 'Rotation': '5.27 h'
+    },
+    highlights: [
+      'A near-Earth asteroid — its orbit crosses inside Mars’s',
+      'First asteroid orbited and landed on (NASA’s NEAR Shoemaker, 2000–2001)',
+      'A peanut-shaped rubble world, a classic orbit-determination target'
+    ],
+    blurb: 'Eros is a large near-Earth asteroid and the first ever orbited and landed on. Its elongated, cratered shape and Mars-crossing orbit made it a landmark for both spacecraft navigation and the kind of orbit determination done from ground observations.'
+  },
+  {
+    key: 'apophis', nameZh: 'Apophis', nameEn: '99942 Apophis', type: 'asteroid',
+    color: 0xd98f5e, displaySize: 0.26,
+    a: 0.9223592206975018, e: 0.1911492279663492, I: 3.340996879880978,
+    argp: 126.6795706895841, node: 203.8936514240762,
+    tperi: 2461042.919201488142, period: 323.5553366891694,
+    facts: {
+      'Semi-major axis a': '0.9224 AU', 'Eccentricity e': '0.1911',
+      'Inclination i': '3.34°', 'Ascending node Ω': '203.89°',
+      'Arg. of perihelion ω': '126.68°', 'Orbital period': '0.89 yr',
+      'Diameter': '~340 m', 'Rotation': '30.6 h'
+    },
+    highlights: [
+      'A famous potentially-hazardous near-Earth asteroid',
+      'Will pass just ~32,000 km from Earth on 13 April 2029 — closer than some satellites',
+      'Precise orbit determination has since ruled out any impact for the next century'
+    ],
+    blurb: 'Apophis is a near-Earth asteroid that briefly ranked as one of the most threatening ever found. Careful, repeated orbit determination shrank its uncertainty until an impact was ruled out — and revealed a record-close but safe flyby of Earth in 2029.'
+  },
+  {
+    key: 'bennu', nameZh: 'Bennu', nameEn: '101955 Bennu', type: 'asteroid',
+    color: 0x7a7d82, displaySize: 0.26,
+    a: 1.126391025894812, e: 0.2037450762416414, I: 6.03494377024794,
+    argp: 66.22306084084298, node: 2.06086619569642,
+    tperi: 2455439.141940872670, period: 436.6487281120201,
+    facts: {
+      'Semi-major axis a': '1.1264 AU', 'Eccentricity e': '0.2037',
+      'Inclination i': '6.03°', 'Ascending node Ω': '2.06°',
+      'Arg. of perihelion ω': '66.22°', 'Orbital period': '1.20 yr',
+      'Diameter': '~490 m', 'Rotation': '4.30 h'
+    },
+    highlights: [
+      'A carbon-rich near-Earth asteroid sampled by NASA’s OSIRIS-REx',
+      'Its sample returned to Earth in September 2023 — pristine early-Solar-System material',
+      'A loosely-bound rubble pile; one of the best-tracked NEAs for impact risk'
+    ],
+    blurb: 'Bennu is a carbon-rich rubble-pile near-Earth asteroid and the target of NASA’s OSIRIS-REx, which snatched a sample and returned it to Earth in 2023. Its orbit is tracked with extreme precision to model the tiny thermal forces that nudge its path.'
+  }
+];
+
 // Render order (inner to outer)
 export const ALL_BODIES = [SUN, ...PLANETS, MOON];
