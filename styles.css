@@ -296,6 +296,13 @@ html, body {
 .lp-unbound { color: #ff9d6e; font-weight: 500; }
 .lp-cmp { color: var(--text-dim); font-size: 11px; }
 
+/* Editable simulation-speed input */
+.speed-input {
+  width: 56px; background: rgba(255, 255, 255, 0.08); color: var(--text);
+  border: 1px solid var(--panel-border); border-radius: 6px; padding: 2px 6px;
+  font-size: 12px; font-variant-numeric: tabular-nums; text-align: right;
+}
+
 /* ---- Bottom hints ---- */
 #hint {
   position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);

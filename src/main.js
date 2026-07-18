@@ -697,16 +697,27 @@ function focusOn(key) {
 //  UI bindings
 // ---------------------------------------------------------------------------
 const dateLabel = document.getElementById('dateLabel');
-const speedLabel = document.getElementById('speedLabel');
+const speedInput = document.getElementById('speedInput');
 const speedSlider = document.getElementById('speed');
 const playBtn = document.getElementById('playBtn');
 const timeControls = document.getElementById('timeControls');
 const bodyListEl = document.getElementById('bodyList');
 
 const fmtDate = d => d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-const updateSpeedLabel = () => speedLabel.textContent = `${state.daysPerSecond} days / sec`;
+const SPEED_MIN = -200, SPEED_MAX = 200;   // slider range; the input box may exceed it
+const updateSpeedLabel = () => {
+  if (document.activeElement !== speedInput) speedInput.value = state.daysPerSecond;
+  const clamped = Math.max(SPEED_MIN, Math.min(SPEED_MAX, state.daysPerSecond));
+  if (+speedSlider.value !== clamped) speedSlider.value = clamped;
+};
 
 speedSlider.addEventListener('input', () => { state.daysPerSecond = +speedSlider.value; updateSpeedLabel(); });
+speedInput.addEventListener('input', () => {
+  const v = parseFloat(speedInput.value);
+  if (!isFinite(v)) return;                 // ignore empty / partial input
+  state.daysPerSecond = v;                  // any value, even beyond the slider
+  speedSlider.value = Math.max(SPEED_MIN, Math.min(SPEED_MAX, v));
+});
 playBtn.addEventListener('click', () => { state.playing = !state.playing; playBtn.textContent = state.playing ? '⏸ Pause' : '▶ Play'; });
 document.getElementById('nowBtn').addEventListener('click', () => { state.simDate = new Date(); refreshOrbits(); });
 document.getElementById('orbitsToggle').addEventListener('change', e => {
