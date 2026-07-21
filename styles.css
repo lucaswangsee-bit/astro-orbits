@@ -96,6 +96,12 @@ html, body {
 
 /* Quick-select chips */
 .body-list { flex-wrap: wrap; gap: 6px !important; }
+/* Category heading inside the chip list — takes a full row so chips wrap under it */
+.chip-group {
+  flex: 0 0 100%; font-size: 11px; color: var(--text-dim);
+  letter-spacing: 0.03em; margin: 6px 0 0;
+}
+.chip-group:first-child { margin-top: 0; }
 .body-chip {
   flex: 0 0 auto !important;
   display: inline-flex; align-items: center; gap: 5px;

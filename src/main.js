@@ -732,14 +732,29 @@ document.getElementById('followToggle').addEventListener('change', e => { state.
 // Quick-select chips for bodies / stars (rebuilt on mode switch)
 function rebuildChips() {
   bodyListEl.innerHTML = '';
-  const list = state.mode === 'solar' ? [SUN, ...PLANETS, MOON, ...ASTEROIDS, ...COMETS] : starData;
-  for (const b of list) {
-    const color = (b.color || 0xffffff).toString(16).padStart(6, '0');
-    const btn = document.createElement('button');
-    btn.className = 'body-chip';
-    btn.innerHTML = `<span class="dot" style="background:#${color}"></span>${b.nameZh}`;
-    btn.onclick = () => selectObject(b);
-    bodyListEl.appendChild(btn);
+  // Grouped by family so each kind of body sits together under its own heading
+  const groups = state.mode === 'solar'
+    ? [
+        { label: 'Sun & planets', items: [SUN, ...PLANETS, MOON] },
+        { label: 'Asteroids',     items: ASTEROIDS },
+        { label: 'Comets',        items: COMETS }
+      ]
+    : [{ label: 'Nearby stars', items: starData }];
+
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    const head = document.createElement('div');
+    head.className = 'chip-group';
+    head.textContent = g.label;
+    bodyListEl.appendChild(head);
+    for (const b of g.items) {
+      const color = (b.color || 0xffffff).toString(16).padStart(6, '0');
+      const btn = document.createElement('button');
+      btn.className = 'body-chip';
+      btn.innerHTML = `<span class="dot" style="background:#${color}"></span>${b.nameZh}`;
+      btn.onclick = () => selectObject(b);
+      bodyListEl.appendChild(btn);
+    }
   }
 }
 
