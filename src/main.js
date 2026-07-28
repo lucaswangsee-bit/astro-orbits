@@ -14,6 +14,7 @@ import {
 import { SUN, PLANETS, MOON, COMETS, ASTEROIDS } from './bodies.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
+import { ORIGINS } from './origins.js';
 
 const SCALE = 20;        // Solar System: scene units per AU (real distances)
 const SCALE_C = 26;      // Compact mode: reference scale for the √-compressed radius
@@ -103,12 +104,24 @@ scene.add(solarGroup);
 const clickableBodies = [];
 const bodyMeshes = {};
 
+// Base priority per label kind — higher wins when two labels fight for the same
+// patch of screen. The selected body gets a large runtime boost (see declutter).
+const LABEL_PRIORITY = {
+  'label-star': 100,
+  'label-planet': 80,
+  'label-comet': 60,
+  'label-asteroid': 40,
+  'label-ring': 20,
+};
+const labels = [];   // declutter candidates: { obj, el, priority }
+
 function makeLabel(text, className, offsetY) {
   const div = document.createElement('div');
   div.className = 'label ' + className;
   div.textContent = text;
   const obj = new CSS2DObject(div);
   obj.position.set(0, offsetY, 0);
+  labels.push({ obj, el: div, priority: LABEL_PRIORITY[className] ?? 50 });
   return obj;
 }
 
@@ -470,6 +483,7 @@ function showInfo(data) {
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   const highlights = data.highlights.map(h => `<li>${h}</li>`).join('');
   infoEl.innerHTML = `
+    <button class="info-close" id="infoClose" aria-label="Close">✕</button>
     <div class="info-head">
       <span class="dot" style="background:#${color}"></span>
       <div><h2>${data.nameZh} <small>${data.nameEn}</small></h2>
@@ -495,6 +509,14 @@ function showInfo(data) {
     <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
   infoEl.classList.add('visible');
   renderMath(infoEl);
+  // Mobile-only close button (hidden on desktop via CSS): deselect + dock away.
+  const ic = document.getElementById('infoClose');
+  if (ic) ic.onclick = () => {
+    state.selectedKey = null;
+    followTarget = null;
+    infoEl.classList.remove('visible');
+    syncHash();
+  };
   const db = document.getElementById('deriveBtn');
   if (db) db.onclick = () => openDerivation(data);
 
@@ -761,6 +783,8 @@ function rebuildChips() {
 // Mode switching
 const tabSolar = document.getElementById('tabSolar');
 const tabStars = document.getElementById('tabStars');
+const tabOrigins = document.getElementById('tabOrigins');
+const controlsEl = document.getElementById('controls');   // the whole bottom-left control panel
 // Toggle every CSS2DObject label inside a group. The CSS2DRenderer in this
 // build honours only each label's own `.visible`, not its parent Group's, so
 // hiding a Group leaves its text labels floating — we must set them explicitly.
@@ -772,14 +796,25 @@ function setLabelsVisible(group, visible) {
 
 function setMode(m) {
   state.mode = m;
+  const origins = (m === 'origins');
+  if (origins) buildOrigins();   // lazily build the timeline the first time Origins is shown
   solarGroup.visible = (m === 'solar');
   starsGroup.visible = (m === 'stars');
   // Keep labels in lock-step with their mode (see setLabelsVisible above).
   setLabelsVisible(solarGroup, m === 'solar');
   setLabelsVisible(starsGroup, m === 'stars');
   timeControls.style.display = (m === 'solar') ? '' : 'none';
+  // Origins is a flat, scrolling article rather than a 3D view: hide the live-sim
+  // chrome and reveal the timeline (the 3D scene keeps rendering quietly behind it).
+  controlsEl.style.display = origins ? 'none' : '';
+  originsPanel.classList.toggle('visible', origins);
+  if (origins) {
+    eventsPanel.classList.remove('visible');
+    ephemPanel.classList.remove('visible');
+  }
   tabSolar.classList.toggle('active', m === 'solar');
   tabStars.classList.toggle('active', m === 'stars');
+  tabOrigins.classList.toggle('active', origins);
   focusTarget = null;
   followTarget = null;
   state.selectedKey = null;
@@ -790,6 +825,76 @@ function setMode(m) {
 }
 tabSolar.onclick = () => { setMode('solar'); syncHash(); };
 tabStars.onclick = () => { setMode('stars'); syncHash(); };
+tabOrigins.onclick = () => { setMode('origins'); syncHash(); };
+
+// ---------------------------------------------------------------------------
+//  C) Origins — a full-screen, vertically-scrolling cosmic timeline. The chapter
+//     data lives in origins.js; here we render it into #originsPanel once (the
+//     first time the mode is shown) and reuse the derivation modal for a
+//     chapter's optional full derivation.
+// ---------------------------------------------------------------------------
+const originsPanel = document.getElementById('originsPanel');
+let originsBuilt = false;
+
+// Open a chapter's derivation in the shared #deriveOverlay modal. We only fill
+// its slots and flip it visible — the existing close button / Esc / backdrop
+// click handlers dismiss it, so we don't wire any of our own.
+function openOriginsDerivation(derive) {
+  document.getElementById('deriveTitle').textContent = derive.title;
+  document.getElementById('deriveSub').textContent = '';
+  const body = document.getElementById('deriveBody');
+  body.innerHTML = derive.html;
+  renderMath(body);
+  deriveOverlay.classList.add('visible');
+}
+
+function buildOrigins() {
+  if (originsBuilt) return;   // build once, then just toggle visibility
+  originsBuilt = true;
+  let html = `
+    <div class="origins-inner">
+      <header class="origins-head">
+        <h1>Origins</h1>
+        <p>A scroll through cosmic history — from the first instant to the world beneath your feet.</p>
+      </header>`;
+  for (const ch of ORIGINS) {
+    html += `
+      <article class="origin-card">
+        <div class="origin-top">
+          <span class="origin-icon">${ch.icon}</span>
+          <span class="origin-epoch">${ch.epoch}</span>
+        </div>
+        <h2 class="origin-title">${ch.title}</h2>
+        <div class="origin-body">${ch.body}</div>
+        ${ch.formula ? `<div class="formula-block">$$${ch.formula}$$</div>` : ''}
+        ${ch.derive ? `<button class="derive-btn origin-derive" data-id="${ch.id}">Show the full derivation →</button>` : ''}
+      </article>`;
+  }
+  // Hand-off CTA: from the story straight into the live simulation.
+  html += `
+      <div class="origins-cta-wrap">
+        <button id="originsCta" class="cta primary">Enter the Solar System →</button>
+      </div>
+    </div>`;
+  originsPanel.innerHTML = html;
+
+  // Wire each chapter's derivation button to the shared modal.
+  originsPanel.querySelectorAll('.origin-derive').forEach(btn => {
+    const ch = ORIGINS.find(c => c.id === btn.dataset.id);
+    if (ch && ch.derive) btn.onclick = () => openOriginsDerivation(ch.derive);
+  });
+
+  // Hand-off: drop the reader into the live sim exactly the way the landing's
+  // Enter button does — enter the app on first run, otherwise just switch mode.
+  const cta = document.getElementById('originsCta');
+  if (cta) cta.onclick = () => {
+    if (!appEntered) enterApp('solar');
+    else setMode('solar');
+    syncHash();
+  };
+
+  renderMath(originsPanel);   // typeset all $$…$$ and \( \) across every chapter
+}
 
 // ---------------------------------------------------------------------------
 //  Sky-events panel (computed lazily)
@@ -902,6 +1007,7 @@ document.getElementById('enterStars').onclick = () => { enterApp('stars'); syncH
 //    #/solar/<key>       → Solar System + that body selected  (e.g. #/solar/earth)
 //    #/stars             → Nearby Stars, no selection
 //    #/stars/<key>       → Nearby Stars + that star selected  (e.g. #/stars/sirius)
+//    #/origins           → Origins timeline (a flat article; no selectable key)
 //  `sun` exists in both modes; the mode prefix disambiguates.
 // ---------------------------------------------------------------------------
 
@@ -915,6 +1021,7 @@ function dataForKey(mode, key) {
 // Build the hash string that describes the CURRENT view.
 function currentHash() {
   if (!appEntered) return '#/';
+  if (state.mode === 'origins') return '#/origins';   // the timeline article has no selectable key
   return state.selectedKey && dataForKey(state.mode, state.selectedKey)
     ? `#/${state.mode}/${state.selectedKey}`
     : `#/${state.mode}`;
@@ -937,7 +1044,7 @@ function parseHash(hash) {
   const raw = (hash || '').replace(/^#\/?/, '');   // strip leading '#' and optional '/'
   if (!raw) return null;
   const [mode, key] = raw.split('/');
-  if (mode !== 'solar' && mode !== 'stars') return null;
+  if (mode !== 'solar' && mode !== 'stars' && mode !== 'origins') return null;
   return { mode, key: key || null };
 }
 
@@ -977,7 +1084,10 @@ function handleHashChange() {
   applyRoute(parseHash(location.hash));
 }
 window.addEventListener('hashchange', handleHashChange);
-applyRoute(parseHash(location.hash));   // initial deep-link restore
+// NOTE: the initial deep-link restore is deferred to the very end of the module
+// (just after animate() starts). A hash like #/solar makes applyRoute → enterApp
+// → startTour touch `tour`/TOUR_WP, which are declared further below; running it
+// here would hit their temporal-dead-zone and abort the whole module.
 
 // ---------------------------------------------------------------------------
 //  Render loop
@@ -1025,6 +1135,66 @@ renderer.domElement.addEventListener('pointerdown', endTour);
 renderer.domElement.addEventListener('wheel', endTour, { passive: true });
 const _tourSkip = document.getElementById('tourSkip');
 if (_tourSkip) _tourSkip.onclick = endTour;
+
+// ---------------------------------------------------------------------------
+//  Label declutter — a screen-space pass that hides overlapping labels so text
+//  never piles up when bodies crowd together. Each frame we project every
+//  mode-visible label to pixels, sort by importance (selected > star > planet >
+//  comet > asteroid > ring, ties broken by nearest-to-camera), then greedily
+//  place them: a label whose box hits an already-placed one is hidden.
+//
+//  We toggle `element.style.visibility` (NOT `.visible`/`display`): CSS2DRenderer
+//  owns `display` for its own frustum/mode culling and setLabelsVisible owns
+//  `.visible`, so visibility is the one channel we can drive without a fight.
+// ---------------------------------------------------------------------------
+const _lblPos = new THREE.Vector3();
+function declutterLabels() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const cands = [];
+  for (const L of labels) {
+    if (!L.obj.visible) continue;            // hidden by the solar/stars mode toggle
+    L.obj.getWorldPosition(_lblPos);
+    const dist = camera.position.distanceTo(_lblPos);
+    _lblPos.project(camera);
+    // Behind the camera or well outside the frustum: leave it to CSS2DRenderer
+    // (it parks such labels off-screen) and drop it from the overlap contest.
+    if (_lblPos.z > 1 || Math.abs(_lblPos.x) > 1.2 || Math.abs(_lblPos.y) > 1.2) {
+      L.el.style.visibility = '';
+      continue;
+    }
+    const parent = L.obj.parent;
+    const key = parent && parent.userData
+      ? (parent.userData.body?.key ?? parent.userData.star?.key)
+      : null;
+    const priority = key && key === state.selectedKey ? 1000 : L.priority;
+    cands.push({
+      L,
+      sx: (_lblPos.x * 0.5 + 0.5) * w,
+      sy: (-_lblPos.y * 0.5 + 0.5) * h,
+      dist, priority,
+    });
+  }
+  cands.sort((a, b) => (b.priority - a.priority) || (a.dist - b.dist));
+
+  const placed = [];
+  const PAD = 2;
+  for (const c of cands) {
+    const el = c.L.el;
+    const bw = el.offsetWidth || 40, bh = el.offsetHeight || 14;
+    const left = c.sx - bw / 2 - PAD, right = c.sx + bw / 2 + PAD;
+    const top = c.sy - bh / 2 - PAD, bottom = c.sy + bh / 2 + PAD;
+    let overlap = false;
+    for (const p of placed) {
+      if (left < p.right && right > p.left && top < p.bottom && bottom > p.top) { overlap = true; break; }
+    }
+    if (overlap) {
+      el.style.visibility = 'hidden';
+    } else {
+      el.style.visibility = '';
+      placed.push({ left, right, top, bottom });
+    }
+  }
+}
 
 let lastT = performance.now();
 function animate() {
@@ -1076,10 +1246,16 @@ function animate() {
   }
 
   controls.update();
+  declutterLabels();
   renderer.render(scene, camera);
   labelRenderer.render(scene, camera);
 }
 animate();
+
+// Restore a deep link now that every function and binding above (tour, animate,
+// route helpers) is initialized — safe to enter a view / select a body / fly the
+// intro tour. (Deferred from the hash-router section; see the note there.)
+applyRoute(parseHash(location.hash));
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

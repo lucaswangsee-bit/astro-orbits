@@ -126,6 +126,17 @@ html, body {
 }
 #info.visible { opacity: 1; transform: translateX(0); }
 
+/* Close button for the info sheet — hidden on desktop, revealed only on the
+   mobile bottom-sheet layout (see the max-width:720px block below). */
+.info-close {
+  display: none;
+  position: sticky; top: 0; z-index: 3;
+  width: 34px; height: 34px; margin: 0 0 -34px auto;
+  align-items: center; justify-content: center;
+  background: rgba(20, 26, 44, 0.92); border: 1px solid var(--panel-border);
+  border-radius: 50%; color: var(--text-dim); font-size: 15px; cursor: pointer;
+}
+
 .info-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .info-head .dot { width: 20px; height: 20px; box-shadow: 0 0 14px currentColor; }
 .info-head h2 { font-size: 21px; }
@@ -325,10 +336,43 @@ html, body {
 #info::-webkit-scrollbar { width: 6px; }
 #info::-webkit-scrollbar-thumb { background: rgba(110, 168, 255, 0.3); border-radius: 3px; }
 
-/* Mobile adaptation */
+/* ---- Mobile: dock the floating panels as non-overlapping bottom sheets ----
+   Everything here is scoped to small screens; the desktop layout above is left
+   completely untouched. The old build let #info float mid-screen and collide
+   with #controls; instead each panel now slides up from the bottom edge. */
 @media (max-width: 720px) {
-  #controls { width: calc(100vw - 40px); }
-  #info { width: calc(100vw - 40px); top: auto; bottom: 200px; max-height: 45vh; }
+  #topbar { top: 12px; left: 14px; }
+  #topbar h1 { font-size: 18px; }
+  #topbar .subtitle { display: none; }
+
+  /* Common sheet shape: full-width, docked to the bottom, scrolls internally. */
+  #controls, #info, #eventsPanel, #ephemPanel {
+    top: auto; bottom: 0; left: 0; right: 0;
+    width: 100%; max-width: 100%;
+    border-radius: 16px 16px 0 0;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Base layer — the always-present control sheet (capped so it can't eat the
+     whole screen; its chip list scrolls). */
+  #controls {
+    z-index: 10;
+    max-height: 48vh; overflow-y: auto;
+    padding: 12px 16px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  /* Overlays slide UP and stack above the controls sheet. Only the transform is
+     re-pointed to the vertical axis — desktop's sideways slide is unaffected. */
+  #info, #eventsPanel, #ephemPanel {
+    z-index: 30;
+    max-height: 82vh; overflow-y: auto;
+    transform: translateY(100%);
+    padding-bottom: calc(18px + env(safe-area-inset-bottom));
+  }
+  #info.visible, #eventsPanel.visible, #ephemPanel.visible { transform: translateY(0); }
+
+  .info-close { display: flex; }   /* the info sheet gets a tap-to-close button */
+
   #hint { display: none; }
 }
 
@@ -417,4 +461,71 @@ html, body {
   .landing-title { font-size: 44px; }
   .landing-sub { font-size: 14px; }
   .landing-actions { flex-direction: column; align-items: stretch; }
+}
+
+/* ==========================================================================
+   Origins — full-screen, vertically-scrolling cosmic timeline
+   ========================================================================== */
+/* Sits above the 3D scene but below the topbar tabs (z:10, so the tabs stay
+   clickable to switch away) and below the derivation modal (z:40, so a chapter's
+   derivation opens on top). Toggled with .visible from setMode(). */
+#originsPanel {
+  position: fixed; inset: 0; z-index: 8;
+  overflow-y: auto; -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(40,64,130,0.32), rgba(6,8,18,0.92) 60%, rgba(5,6,13,0.96) 100%);
+  opacity: 0; pointer-events: none; transition: opacity 0.3s ease;
+}
+#originsPanel.visible { opacity: 1; pointer-events: auto; }
+/* Fade the scrolling chapters out under the fixed topbar/tabs (which have no
+   background of their own) so text doesn't clash with the title as it scrolls. */
+#originsPanel::before {
+  content: ''; position: fixed; top: 0; left: 0; right: 0; height: 96px; z-index: 1;
+  background: linear-gradient(rgba(6, 8, 18, 0.97), rgba(6, 8, 18, 0));
+  pointer-events: none;
+}
+#originsPanel::-webkit-scrollbar { width: 8px; }
+#originsPanel::-webkit-scrollbar-thumb { background: rgba(110, 168, 255, 0.3); border-radius: 4px; }
+
+/* Centred reading column. Top padding clears the fixed topbar + tabs. */
+.origins-inner { max-width: 760px; margin: 0 auto; padding: 118px 24px 88px; }
+
+.origins-head { text-align: center; margin-bottom: 40px; }
+.origins-head h1 {
+  font-size: 46px; font-weight: 800; letter-spacing: 2px; line-height: 1.1; margin-bottom: 14px;
+  background: linear-gradient(120deg, #eaf1ff, #6ea8ff 55%, #b98cff);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+}
+.origins-head p { font-size: 15px; line-height: 1.75; color: var(--text-dim); max-width: 560px; margin: 0 auto; }
+
+/* One card per chapter — the site's panel look, blurred and bordered. */
+.origin-card {
+  background: var(--panel); border: 1px solid var(--panel-border);
+  border-radius: 16px; padding: 22px 24px; margin-bottom: 20px;
+  backdrop-filter: blur(12px);
+}
+.origin-top { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.origin-icon { font-size: 30px; line-height: 1; }
+.origin-epoch {
+  font-size: 11px; letter-spacing: 0.5px; color: var(--accent);
+  background: rgba(110, 168, 255, 0.14); border: 1px solid var(--panel-border);
+  padding: 3px 10px; border-radius: 20px; white-space: nowrap;
+}
+.origin-title { font-size: 22px; font-weight: 700; margin-bottom: 10px; color: var(--text); }
+.origin-body { font-size: 14px; line-height: 1.8; color: #c7d2ec; }
+.origin-body p { margin-bottom: 10px; }
+.origin-body p:last-child { margin-bottom: 0; }
+/* The derivation button reuses .derive-btn; just rein in its full-bleed width. */
+.origin-derive { max-width: 340px; }
+
+/* Hand-off CTA into the live simulation (reuses the landing's .cta.primary). */
+.origins-cta-wrap { text-align: center; margin-top: 40px; }
+
+@media (max-width: 720px) {
+  .origins-inner { padding: 92px 16px 64px; }
+  .origins-head h1 { font-size: 34px; }
+  .origins-head p { font-size: 14px; }
+  .origin-card { padding: 18px 16px; }
+  .origin-title { font-size: 19px; }
 }

@@ -3,7 +3,37 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cosmic Orbits · Solar System</title>
+  <title>Cosmic Orbits · Interactive 3D Solar System</title>
+
+  <!-- ===== SEO / social share ===== -->
+  <meta name="description" content="An interactive 3D atlas of the Solar System and our stellar neighborhood, built on real NASA/JPL orbital data. Watch planets, asteroids and comets trace true Keplerian orbits in real time." />
+  <meta name="author" content="Lucas Wang" />
+  <meta name="theme-color" content="#070c1c" />
+  <link rel="canonical" href="https://lucaswangsee-bit.github.io/astro-orbits/" />
+
+  <!-- Open Graph (Facebook, WeChat, iMessage, Slack, LinkedIn …) -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Cosmic Orbits" />
+  <meta property="og:title" content="Cosmic Orbits · Interactive 3D Solar System" />
+  <meta property="og:description" content="An interactive 3D atlas of the Solar System, built on real NASA/JPL orbital data — real-time Keplerian orbits, sky-event forecasts, ephemerides and orbit-determination math." />
+  <meta property="og:url" content="https://lucaswangsee-bit.github.io/astro-orbits/" />
+  <meta property="og:image" content="https://lucaswangsee-bit.github.io/astro-orbits/assets/og-image.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Cosmic Orbits — a 3D Solar System with the Sun and planets on their orbits" />
+
+  <!-- Twitter / X large-image card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Cosmic Orbits · Interactive 3D Solar System" />
+  <meta name="twitter:description" content="Real NASA/JPL orbital data · real-time Keplerian orbits · sky-event forecasts · orbit-determination math." />
+  <meta name="twitter:image" content="https://lucaswangsee-bit.github.io/astro-orbits/assets/og-image.jpg" />
+
+  <!-- Favicons -->
+  <link rel="icon" type="image/svg+xml" href="assets/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16.png" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+
   <link rel="stylesheet" href="styles.css" />
   <!-- KaTeX: typeset the derivation formulas like a physics textbook -->
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css" />
@@ -52,6 +82,7 @@
     <div class="tabs">
       <button id="tabSolar" class="active">Solar System</button>
       <button id="tabStars">Nearby Stars</button>
+      <button id="tabOrigins">Origins</button>
     </div>
   </header>
 
@@ -88,6 +119,9 @@
 
   <!-- Right: object info panel -->
   <aside id="info"></aside>
+
+  <!-- Origins: full-screen, vertically-scrolling cosmic timeline (filled by JS) -->
+  <div id="originsPanel"></div>
 
   <!-- Sky-events panel -->
   <aside id="eventsPanel">
