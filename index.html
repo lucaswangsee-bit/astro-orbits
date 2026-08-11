@@ -86,39 +86,69 @@
     </div>
   </header>
 
-  <!-- Bottom-left: control panel -->
+  <!-- Bottom-left: control panel. The bar is always visible; clicking it folds
+       the whole panel down to that single strip. -->
   <div id="controls">
-    <div id="timeControls">
-      <div class="row date-row">
-        <span class="label-sm">Simulated time</span>
-        <strong id="dateLabel">—</strong>
+    <button class="panel-bar" id="controlsBar" aria-expanded="true" aria-controls="controlsBody">
+      <span class="panel-title">Controls</span>
+      <span class="panel-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div class="panel-body" id="controlsBody">
+      <!-- Time + view live together: setMode() hides both in Nearby Stars mode. -->
+      <div id="timeControls">
+        <section class="sec">
+          <h4 class="sec-h">Time</h4>
+          <div class="row date-row">
+            <span class="label-sm">Simulated</span>
+            <strong id="dateLabel">—</strong>
+          </div>
+          <div class="row">
+            <button id="playBtn">⏸ Pause</button>
+            <button id="nowBtn">↺ Today</button>
+          </div>
+          <div class="row speed-row">
+            <span class="label-sm">Speed</span>
+            <input type="range" id="speed" min="-200" max="200" step="1" value="5" />
+            <input type="number" id="speedInput" class="speed-input" value="5" step="1" title="Type any value — even beyond the slider's range" />
+            <span class="label-sm unit">d/s</span>
+          </div>
+        </section>
+        <section class="sec">
+          <h4 class="sec-h">View</h4>
+          <div class="toggle-grid">
+            <label class="checkbox" title="Draw each body's full orbital ellipse"><input type="checkbox" id="orbitsToggle" checked /> <span>Orbits</span></label>
+            <label class="checkbox" title="Shade the area the selected planet sweeps in a fixed time — Kepler's 2nd law"><input type="checkbox" id="sweepToggle" checked /> <span>Sweep</span></label>
+            <label class="checkbox" title="Bring the far outer planets and comet orbits closer so the whole system fits on screen"><input type="checkbox" id="compactToggle" /> <span>Compact</span></label>
+            <label class="checkbox" title="Keep the camera centred on the selected body as it orbits (you can still zoom and rotate freely)"><input type="checkbox" id="followToggle" /> <span>Follow</span></label>
+          </div>
+        </section>
       </div>
-      <div class="row">
-        <button id="playBtn">⏸ Pause</button>
-        <button id="nowBtn">↺ Back to today</button>
-      </div>
-      <div class="row">
-        <span class="label-sm">Speed</span>
-        <input type="range" id="speed" min="-200" max="200" step="1" value="5" />
-        <input type="number" id="speedInput" class="speed-input" value="5" step="1" title="Type any value — even beyond the slider's range" />
-        <span class="label-sm">days / sec</span>
-      </div>
-      <div class="row">
-        <label class="checkbox"><input type="checkbox" id="orbitsToggle" checked /> Orbit lines</label>
-        <button id="eventsBtn" class="mini-btn">🔭 Sky events</button>
-        <button id="ephemBtn" class="mini-btn">🛰 Ephemeris</button>
-      </div>
-      <div class="row toggles-row">
-        <label class="checkbox"><input type="checkbox" id="sweepToggle" checked /> ⟠ Kepler sweep</label>
-        <label class="checkbox" title="Bring the far outer planets and comet orbits closer so the whole system fits on screen"><input type="checkbox" id="compactToggle" /> 🪐 Compact distances</label>
-        <label class="checkbox" title="Keep the camera centred on the selected body as it orbits (you can still zoom and rotate freely)"><input type="checkbox" id="followToggle" /> 🎯 Follow selected</label>
-      </div>
+      <section class="sec">
+        <h4 class="sec-h">Tools</h4>
+        <div class="tool-grid">
+          <button id="eventsBtn" class="mini-btn solar-only" title="Oppositions, elongations and conjunctions computed from real orbits">🔭 Events</button>
+          <button id="ephemBtn" class="mini-btn solar-only" title="Where a body appears in Earth's sky on a given date">🛰 Ephemeris</button>
+          <button id="odBtn" class="mini-btn" title="Recover a full orbit from three sky positions — Gauss's method">📐 Orbit det.</button>
+          <button id="resetBtn" class="mini-btn" title="Re-centre the camera on this view (R)">🏠 Reset</button>
+          <button id="helpBtn" class="mini-btn" title="Help, legend &amp; keyboard shortcuts (?)">? Help</button>
+        </div>
+      </section>
+      <section class="sec">
+        <h4 class="sec-h">Bodies</h4>
+        <div class="body-list" id="bodyList"></div>
+      </section>
     </div>
-    <div class="row body-list" id="bodyList"></div>
   </div>
 
-  <!-- Right: object info panel -->
-  <aside id="info"></aside>
+  <!-- Right: object info panel. Same fold-to-a-strip treatment; the bar keeps
+       showing which body is selected while the detail is tucked away. -->
+  <aside id="info">
+    <button class="panel-bar" id="infoBar" aria-expanded="true" aria-controls="infoBody">
+      <span class="panel-title" id="infoTitle">Selection</span>
+      <span class="panel-chevron" aria-hidden="true">▾</span>
+    </button>
+    <div class="panel-body" id="infoBody"></div>
+  </aside>
 
   <!-- Origins: full-screen, vertically-scrolling cosmic timeline (filled by JS) -->
   <div id="originsPanel"></div>
@@ -152,6 +182,31 @@
     <div id="ephemResult"></div>
   </aside>
 
+  <!-- Orbit-determination lab: three sky positions → the six orbital elements.
+       Wider than its siblings because every run reports three tables. -->
+  <aside id="odPanel">
+    <div class="ev-head">
+      <h2>📐 Orbit Determination Lab</h2>
+      <button id="odClose">✕</button>
+    </div>
+    <p class="ev-note">Three sky positions are enough to recover a whole orbit: 3 observations × (RA, Dec) = 6 measured numbers = the 6 orbital elements. This is the <b>inverse</b> of the Ephemeris panel — there a known orbit predicts a position; here measured positions solve for the orbit.</p>
+    <div class="ephem-form od-form">
+      <label>Asteroid
+        <select id="odBody"></select>
+      </label>
+      <div class="od-dates">
+        <label>Observation 1 (UTC)<input type="date" id="odDate1" /></label>
+        <label>Observation 2 (UTC)<input type="date" id="odDate2" /></label>
+        <label>Observation 3 (UTC)<input type="date" id="odDate3" /></label>
+      </div>
+      <label title="Gaussian scatter added to every measured RA and Dec before the solver sees them">Observational noise σ (arcsec)
+        <input type="number" id="odNoise" min="0" max="120" step="0.5" value="0" />
+      </label>
+      <button id="odGo" class="mini-btn od-go">Determine the orbit</button>
+    </div>
+    <div id="odResult"></div>
+  </aside>
+
   <!-- Cinematic intro hint (shown during the auto fly-through) -->
   <div id="tourHint">
     <span>✦ Sit back for the tour — or drag to explore, scroll to zoom</span>
@@ -167,6 +222,50 @@
       </div>
       <p class="ev-note" id="deriveSub">The math behind this object</p>
       <div id="deriveBody"></div>
+    </aside>
+  </div>
+
+  <!-- Help / legend overlay: navigation, colour legend and keyboard shortcuts -->
+  <div id="helpOverlay">
+    <aside id="helpPanel" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+      <div class="ev-head">
+        <h2 id="helpTitle">❔ How to use Cosmic Orbits</h2>
+        <button id="helpClose" aria-label="Close">✕</button>
+      </div>
+      <p class="ev-note">Everything you need to find your way around the 3D view</p>
+
+      <div class="help-section">
+        <h3>Navigation</h3>
+        <ul class="help-list">
+          <li><b>Drag</b> to rotate the view around the centre</li>
+          <li><b>Scroll</b> (or pinch) to zoom in and out</li>
+          <li><b>Click any body</b> — or any chip in the control panel — to open its data, live physics and full derivation</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h3>Colour legend</h3>
+        <ul class="help-legend">
+          <li><span class="swatch" style="background:#ffd873"></span><b>Stars</b> — the Sun, and every star in the Nearby Stars map</li>
+          <li><span class="swatch" style="background:#cfe0ff"></span><b>Planets &amp; moons</b> — the eight planets and the Moon</li>
+          <li><span class="swatch" style="background:#8ff0e0"></span><b>Comets</b> <i>(italic labels)</i> — icy bodies with Sun-facing tails</li>
+          <li><span class="swatch" style="background:#d8c9a8"></span><b>Asteroids</b> — real minor planets solved from JPL elements</li>
+          <li><span class="swatch" style="background:#5f7fb0"></span><b>Distance rings</b> — light-year reference circles in the star map</li>
+        </ul>
+      </div>
+
+      <div class="help-section">
+        <h3>Keyboard shortcuts</h3>
+        <table class="help-keys">
+          <tr><td><kbd>Space</kbd></td><td>Play / pause the simulation</td></tr>
+          <tr><td><kbd>R</kbd></td><td>Reset the view to its default framing</td></tr>
+          <tr><td><kbd>O</kbd></td><td>Show / hide the orbit lines</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Open this help panel</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close any open panel</td></tr>
+        </table>
+      </div>
+
+      <p class="help-foot">Labels fade in and out as you move: when two would overlap on screen, the less important one is hidden automatically — nothing is missing, just zoom in and it comes back.</p>
     </aside>
   </div>
 

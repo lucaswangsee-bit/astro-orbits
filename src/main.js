@@ -12,6 +12,7 @@ import {
   orbitalElements, GM_SUN
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS, ASTEROIDS } from './bodies.js';
+import { observeBody, determineOrbit, residuals, elementsToBody } from './gauss.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
 import { ORIGINS } from './origins.js';
@@ -272,6 +273,46 @@ function refreshOrbits() {
   }
 }
 
+// ---------------------------------------------------------------------------
+//  Recovered orbit — the bright green ellipse the Orbit Determination Lab draws
+//  into the live scene, on top of the asteroid's true orbit. Declared HERE (with
+//  the other orbit-line state, well above every caller) so that setMode() and
+//  rebuildCometOrbits() can reach it without ever touching a TDZ binding.
+//  At most one exists at a time: a new run replaces the previous one.
+// ---------------------------------------------------------------------------
+let recoveredLine = null;      // THREE.Line currently in solarGroup, or null
+let recoveredPtsAU = null;     // its path in AU, kept for the scale-morph remap
+
+function clearRecoveredOrbit() {
+  if (!recoveredLine) return;
+  solarGroup.remove(recoveredLine);
+  recoveredLine.geometry.dispose();    // free the GPU buffers — runs on every re-run
+  recoveredLine.material.dispose();
+  recoveredLine = null;
+  recoveredPtsAU = null;
+}
+
+// Draw the ellipse described by a solved element set. `el` is the solver's
+// `elements` (a in AU, angles in DEGREES); `epochJd` is the epoch its M refers to.
+function drawRecoveredOrbit(el, epochJd) {
+  clearRecoveredOrbit();                              // replace, never stack
+  const period = 365.25 * Math.pow(el.a, 1.5);        // Kepler III, days (a in AU)
+  const n = 2 * Math.PI / period;                     // mean motion, rad/day
+  // cometOrbitPath() wants a body-shaped record: angles in degrees, plus the
+  // perihelion epoch implied by the mean anomaly at `epochJd`.
+  const shape = {
+    a: el.a, e: el.e, I: el.i, argp: el.omega, node: el.node,
+    tperi: epochJd - (el.M * Math.PI / 180) / n,
+    period
+  };
+  recoveredPtsAU = cometOrbitPath(shape);
+  recoveredLine = new THREE.Line(
+    new THREE.BufferGeometry().setFromPoints(recoveredPtsAU.map(toScene)),
+    new THREE.LineBasicMaterial({ color: 0x7dffb0, transparent: true, opacity: 0.9 })
+  );
+  solarGroup.add(recoveredLine);
+}
+
 // Re-map the (static) comet orbit lines through the current scale — called each
 // frame while the compact/real distance morph is in progress.
 function rebuildCometOrbits() {
@@ -281,6 +322,8 @@ function rebuildCometOrbits() {
   for (const rig of asteroidRigs) {
     rig.orbitLine.geometry.setFromPoints(rig.orbitPtsAU.map(toScene));
   }
+  // The recovered ellipse is static too, so it needs the same treatment
+  if (recoveredLine) recoveredLine.geometry.setFromPoints(recoveredPtsAU.map(toScene));
 }
 
 // ---------------------------------------------------------------------------
@@ -473,6 +516,8 @@ function onPointerDown(e) {
 //  Info panel (shared by bodies and stars)
 // ---------------------------------------------------------------------------
 const infoEl = document.getElementById('info');
+const infoBody = document.getElementById('infoBody');
+const infoTitle = document.getElementById('infoTitle');
 function typeName(obj) {
   if (obj.spectral) return 'Star · ' + obj.spectral;
   return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet', asteroid: 'Asteroid' }[obj.type] || obj.type;
@@ -482,8 +527,8 @@ function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
   const highlights = data.highlights.map(h => `<li>${h}</li>`).join('');
-  infoEl.innerHTML = `
-    <button class="info-close" id="infoClose" aria-label="Close">✕</button>
+  infoTitle.textContent = data.nameZh;   // the bar keeps naming it while folded
+  infoBody.innerHTML = `
     <div class="info-head">
       <span class="dot" style="background:#${color}"></span>
       <div><h2>${data.nameZh} <small>${data.nameEn}</small></h2>
@@ -508,15 +553,8 @@ function showInfo(data) {
     ${data.mechanics ? `
     <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
   infoEl.classList.add('visible');
-  renderMath(infoEl);
-  // Mobile-only close button (hidden on desktop via CSS): deselect + dock away.
-  const ic = document.getElementById('infoClose');
-  if (ic) ic.onclick = () => {
-    state.selectedKey = null;
-    followTarget = null;
-    infoEl.classList.remove('visible');
-    syncHash();
-  };
+  infoEl.classList.remove('collapsed');   // a fresh selection always opens up
+  renderMath(infoBody);
   const db = document.getElementById('deriveBtn');
   if (db) db.onclick = () => openDerivation(data);
 
@@ -687,6 +725,38 @@ deriveOverlay.addEventListener('click', e => { if (e.target === deriveOverlay) c
 document.getElementById('deriveClose').onclick = closeDerivation;
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDerivation(); });
 
+// ---------------------------------------------------------------------------
+//  Help / legend overlay — navigation, the label colour legend and the keyboard
+//  shortcuts. Opened from the ? button in #controls or the ? / H keys, and shown
+//  once automatically on a visitor's first entry into the 3D app.
+// ---------------------------------------------------------------------------
+const helpOverlay = document.getElementById('helpOverlay');
+const HELP_SEEN_KEY = 'cosmicOrbits.helpSeen';
+
+// localStorage throws outright in some privacy modes — never let it break the app.
+function helpSeen() {
+  try { return localStorage.getItem(HELP_SEEN_KEY) === '1'; } catch { return false; }
+}
+function markHelpSeen() {
+  try { localStorage.setItem(HELP_SEEN_KEY, '1'); } catch { /* storage unavailable — just show it again next time */ }
+}
+
+function openHelp() { helpOverlay.classList.add('visible'); markHelpSeen(); }
+function closeHelp() { helpOverlay.classList.remove('visible'); }
+
+// First-visit auto-show. Deliberately NOT fired while the cinematic intro tour is
+// flying: enterApp() defers it to endTour() so the two never compete for attention,
+// and a non-solar entry (which runs no tour) opens it straight away. The short
+// delay lets the mode transition settle first.
+function maybeAutoShowHelp() {
+  if (helpSeen()) return;
+  setTimeout(() => { if (!helpSeen()) openHelp(); }, 600);   // re-check: they may have opened it by hand
+}
+
+helpOverlay.addEventListener('click', e => { if (e.target === helpOverlay) closeHelp(); });
+document.getElementById('helpClose').onclick = closeHelp;
+document.getElementById('helpBtn').onclick = openHelp;
+
 // Live vis-viva readout, refreshed each frame while a planet is selected
 function updateLivePhysics(jd) {
   const k = state.selectedKey;
@@ -751,6 +821,77 @@ document.getElementById('sweepToggle').addEventListener('change', e => { state.s
 document.getElementById('compactToggle').addEventListener('change', e => { compressTarget = e.target.checked ? 1 : 0; });
 document.getElementById('followToggle').addEventListener('change', e => { state.follow = e.target.checked; });
 
+// Restore the CURRENT mode's default framing without switching mode: drop the
+// selection and any focus/follow lock, then re-place the camera exactly the way
+// setMode() does. Shared by the 🏠 button and the R shortcut.
+function resetView() {
+  endTour();                     // a running intro flight would immediately fight the reset
+  focusTarget = null;
+  followTarget = null;
+  state.selectedKey = null;
+  infoEl.classList.remove('visible');
+  clearRecoveredOrbit();         // 🏠 / R also wipes the orbit lab's green overlay
+  controls.target.set(0, 0, 0);
+  camera.position.set(0, state.mode === 'solar' ? 120 : 260, state.mode === 'solar' ? 260 : 620);
+  syncHash();                    // drop the selected-body key from the URL
+}
+document.getElementById('resetBtn').addEventListener('click', resetView);
+
+// Fold either side panel down to its title strip. The bar itself is the button,
+// so the whole strip stays a big, obvious hit target once collapsed.
+function wirePanelFold(panel, bar) {
+  if (!panel || !bar) return;
+  bar.addEventListener('click', () => {
+    const collapsed = panel.classList.toggle('collapsed');
+    bar.setAttribute('aria-expanded', String(!collapsed));
+  });
+}
+wirePanelFold(document.getElementById('controls'), document.getElementById('controlsBar'));
+wirePanelFold(infoEl, document.getElementById('infoBar'));
+
+// ---------------------------------------------------------------------------
+//  Keyboard shortcuts — Space play/pause · R reset view · O orbit lines ·
+//  ? / H help · Esc close panels.
+//  Two guards matter: never fire while the user is typing in one of the app's
+//  form fields (#speedInput, #lpInput, #ephemDate, #ephemBody), and never
+//  swallow a browser shortcut (Cmd/Ctrl/Alt held, e.g. Cmd+R to reload).
+// ---------------------------------------------------------------------------
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  // Escape is handled ahead of the typing guard — it isn't a typing key, so it
+  // should still dismiss panels from inside a field. (The derivation modal has
+  // its own Escape handler; this adds the help/events/ephemeris panels.)
+  if (e.key === 'Escape') {
+    closeHelp();
+    eventsPanel.classList.remove('visible');
+    ephemPanel.classList.remove('visible');
+    odPanel.classList.remove('visible');
+    return;
+  }
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  switch (e.key) {
+    case ' ':
+    case 'Spacebar':             // legacy key name
+      e.preventDefault();        // stop the page scrolling (and a focused button re-firing)
+      playBtn.click();           // reuse the button's own handler so its label stays in sync
+      break;
+    case 'r': case 'R':
+      resetView();
+      break;
+    case 'o': case 'O': {
+      // Flip the checkbox and fire `change` so the existing listener does the work
+      const cb = document.getElementById('orbitsToggle');
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+      break;
+    }
+    case '?': case 'h': case 'H':
+      openHelp();
+      break;
+  }
+});
+
 // Quick-select chips for bodies / stars (rebuilt on mode switch)
 function rebuildChips() {
   bodyListEl.innerHTML = '';
@@ -796,6 +937,10 @@ function setLabelsVisible(group, visible) {
 
 function setMode(m) {
   state.mode = m;
+  // Leaving a view cancels any intro flight still in progress — otherwise the
+  // tour keeps driving the camera with Solar-System waypoints after the user has
+  // switched away, stealing control (and leaving its hint on screen).
+  endTour();
   const origins = (m === 'origins');
   if (origins) buildOrigins();   // lazily build the timeline the first time Origins is shown
   solarGroup.visible = (m === 'solar');
@@ -804,6 +949,8 @@ function setMode(m) {
   setLabelsVisible(solarGroup, m === 'solar');
   setLabelsVisible(starsGroup, m === 'stars');
   timeControls.style.display = (m === 'solar') ? '' : 'none';
+  // Tools that only mean anything against the Solar System (sky events, ephemeris)
+  document.querySelectorAll('.solar-only').forEach(b => { b.style.display = (m === 'solar') ? '' : 'none'; });
   // Origins is a flat, scrolling article rather than a 3D view: hide the live-sim
   // chrome and reveal the timeline (the 3D scene keeps rendering quietly behind it).
   controlsEl.style.display = origins ? 'none' : '';
@@ -811,7 +958,11 @@ function setMode(m) {
   if (origins) {
     eventsPanel.classList.remove('visible');
     ephemPanel.classList.remove('visible');
+    odPanel.classList.remove('visible');
   }
+  // The recovered-orbit ellipse only means anything against the Solar System's
+  // true orbits — drop it (and its GPU buffers) the moment we leave that view.
+  if (m !== 'solar') clearRecoveredOrbit();
   tabSolar.classList.toggle('active', m === 'solar');
   tabStars.classList.toggle('active', m === 'stars');
   tabOrigins.classList.toggle('active', origins);
@@ -978,6 +1129,206 @@ document.getElementById('ephemGo').onclick = runEphem;
 ephemBody.onchange = runEphem;
 ephemDate.onchange = runEphem;
 
+// ---------------------------------------------------------------------------
+//  Orbit-determination lab — the inverse of the ephemeris panel. We synthesise
+//  three (RA, Dec) sightings of a real asteroid from its JPL elements, hand
+//  ONLY those six numbers to Gauss's method, and compare the orbit it recovers
+//  with the truth we started from. The recovered ellipse is also drawn into the
+//  live scene, where it should sit right on top of the real one.
+// ---------------------------------------------------------------------------
+const odPanel = document.getElementById('odPanel');
+const odBodySel = document.getElementById('odBody');
+const odDateEls = ['odDate1', 'odDate2', 'odDate3'].map(id => document.getElementById(id));
+const odNoiseEl = document.getElementById('odNoise');
+const odResult = document.getElementById('odResult');
+let odInit = false;
+
+// Two opposite errors bound a usable arc, and the default spacing has to sit
+// between them:
+//   • too SHORT — the three sight-lines are nearly parallel, so triangulating
+//     the ranges is ill-conditioned and the octic can favour a wrong root;
+//   • too LONG  — the truncated f and g series stops describing the motion.
+// Scaling with the period (~1.2% of it) lands main-belt objects in the ~2–3 week
+// window where both errors are negligible, which is also the cadence a real
+// observing campaign uses.
+function odSpacingDays(body) {
+  return Math.max(3, Math.min(25, Math.round(body.period * 0.012)));
+}
+// Objects whose orbit is close to Earth's are genuinely harder to solve from a
+// short arc; flag them in the picker rather than let the user think it's a bug.
+const odIsNearEarth = body => body.a < 1.7;
+const odToISO = d => new Date(d).toISOString().slice(0, 10);
+
+// Fill the three date inputs with a well-conditioned run for the chosen body.
+function odFillDates() {
+  const body = ASTEROIDS.find(a => a.key === odBodySel.value) || ASTEROIDS[0];
+  const step = odSpacingDays(body);
+  const t0 = Date.now();
+  odDateEls.forEach((el, i) => { el.value = odToISO(t0 + i * step * 86400000); });
+}
+
+function initOD() {
+  odBodySel.innerHTML = ASTEROIDS
+    .map(a => `<option value="${a.key}">${a.nameZh}${odIsNearEarth(a) ? ' — near-Earth, ill-conditioned' : ''}</option>`)
+    .join('');
+  odBodySel.value = 'ceres';
+  odFillDates();
+  odInit = true;
+}
+odBodySel.onchange = odFillDates;   // re-condition the dates for the new target
+
+// Standard normal deviate (Box–Muller) — used to scatter the synthetic
+// measurements when the user asks for observational noise.
+function gaussRandom() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+const fmtRA = h => {
+  const t = Math.round((((h % 24) + 24) % 24) * 3600);
+  return `${Math.floor(t / 3600) % 24}h ${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}m ${String(t % 60).padStart(2, '0')}s`;
+};
+const fmtDec = d => {
+  const t = Math.round(Math.abs(d) * 3600);
+  return `${d < 0 ? '−' : '+'}${Math.floor(t / 3600)}° ${String(Math.floor((t % 3600) / 60)).padStart(2, '0')}′ ${String(t % 60).padStart(2, '0')}″`;
+};
+
+function runOD() {
+  const body = ASTEROIDS.find(a => a.key === odBodySel.value);
+  if (!body) return;
+  const sigma = Math.max(0, parseFloat(odNoiseEl.value) || 0);   // arcsec
+
+  // 1) Synthesise the three sightings from the true orbit, optionally scattered
+  //    by the requested measurement error. Dec is offset directly; RA is offset
+  //    along the sky, so it must be divided by cos(Dec).
+  const jds = odDateEls.map(el => julianDate(new Date((el.value || odToISO(Date.now())) + 'T00:00:00Z')));
+  if (jds.some(j => !isFinite(j)) || jds[0] >= jds[1] || jds[1] >= jds[2]) {
+    odResult.innerHTML = `<div class="od-error"><b>Dates must increase.</b> Set observation 1 &lt; 2 &lt; 3.</div>`;
+    return;
+  }
+  const observations = jds.map(jd => {
+    const o = observeBody(body, jd);
+    let ra = o.raHours, dec = o.decDeg;
+    if (sigma > 0) {
+      dec += (gaussRandom() * sigma) / 3600;
+      ra += (gaussRandom() * sigma) / 3600 / Math.cos(dec * Math.PI / 180) / 15;
+    }
+    return { jd, raHours: ((ra % 24) + 24) % 24, decDeg: dec };
+  });
+
+  // 2) Hand the solver nothing but those six numbers.
+  const r = determineOrbit(observations);
+  if (r.error || !r.elements) {
+    clearRecoveredOrbit();
+    odResult.innerHTML = `<div class="od-error"><b>The solver could not find an orbit.</b><br />${r.error || 'No usable root.'}<br /><br />Try moving the three dates closer together — Gauss's method needs the observed arc to be a small fraction of the orbit.</div>`;
+    return;
+  }
+
+  // 3) Score it against the truth we started from, and against the observations.
+  const res = residuals(r.elements, r.epochJd, observations);
+  const rms = res.rms;
+  const el = r.elements;
+  const truth = { a: body.a, e: body.e, i: body.I, node: body.node, omega: body.argp };
+  const cmp = [
+    ['a · semi-major axis', el.a, truth.a, 'AU', true],
+    ['e · eccentricity', el.e, truth.e, '', true],
+    ['i · inclination', el.i, truth.i, '°', false],
+    ['Ω · ascending node', el.node, truth.node, '°', false],
+    ['ω · arg. of perihelion', el.omega, truth.omega, '°', false]
+  ];
+  const angDiff = (x, y) => { let d = Math.abs(x - y) % 360; return d > 180 ? 360 - d : d; };
+  // Flag a visibly poor recovery so the panel can explain WHY rather than just
+  // showing bad numbers (short arcs are genuinely ill-conditioned).
+  const bigMiss = Math.abs(el.a - truth.a) / truth.a > 0.01 || Math.abs(el.e - truth.e) > 0.01;
+  const rows = cmp.map(([label, got, want, unit, pct]) => {
+    const diff = pct ? Math.abs(got - want) : angDiff(got, want);
+    const good = pct ? (want ? diff / Math.abs(want) < 0.01 : diff < 0.01) : diff < 0.5;
+    const shown = pct && want ? `${(diff / Math.abs(want) * 100).toFixed(3)}%` : `${diff.toFixed(4)}${unit}`;
+    return `<tr><td>${label}</td><td>${got.toFixed(4)}${unit}</td><td>${want.toFixed(4)}${unit}</td>
+      <td class="${good ? 'mech-g' : ''}">${shown}</td></tr>`;
+  }).join('');
+
+  odResult.innerHTML = `
+    <div class="od-section">
+      <h3>The three synthetic observations</h3>
+      <div class="od-scroll"><table class="od-table">
+        <thead><tr><th>Date (UTC)</th><th>Right ascension</th><th>Declination</th></tr></thead>
+        <tbody>${observations.map((o, i) => `<tr><td>${odDateEls[i].value}</td><td>${fmtRA(o.raHours)}</td><td>${fmtDec(o.decDeg)}</td></tr>`).join('')}</tbody>
+      </table></div>
+      <p class="od-note">These six numbers — and nothing else — are what the solver receives.${sigma > 0 ? ` Each was scattered by Gaussian noise of σ = ${sigma}″ to imitate a real measurement.` : ''}</p>
+    </div>
+    <div class="od-section">
+      <h3>Recovered orbit vs. JPL truth</h3>
+      <div class="od-scroll"><table class="od-table">
+        <thead><tr><th>Element</th><th>Recovered</th><th>True</th><th>Difference</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <div class="od-legend"><span class="od-swatch"></span>The green ellipse now in the scene is the recovered orbit — compare it with ${body.nameZh}'s real one.</div>
+    </div>
+    <div class="od-section">
+      <h3>O−C residuals</h3>
+      <div class="od-scroll"><table class="od-table">
+        <thead><tr><th>Observation</th><th>Δ RA</th><th>Δ Dec</th><th>Total</th></tr></thead>
+        <tbody>${res.map((q, i) => `<tr><td>#${i + 1}</td><td>${q.dRA_arcsec.toFixed(3)}″</td><td>${q.dDec_arcsec.toFixed(3)}″</td><td>${q.total_arcsec.toFixed(3)}″</td></tr>`).join('')}</tbody>
+        <tfoot><tr><td>RMS</td><td colspan="3">${rms.toFixed(3)}″</td></tr></tfoot>
+      </table></div>
+      <p class="od-note"><b>O−C = Observed − Computed.</b> The recovered elements are fed back through the forward model to predict where the object should have been, and the difference is the residual.<br /><br />
+      <b>Read this honestly:</b> three observations give six numbers for six unknowns, so the solution is <i>exactly determined</i> — it is forced through all three points and the residuals are near zero <i>by construction</i>. They confirm the solver converged; they do <b>not</b> prove the orbit is right. Only the comparison with JPL above can do that. Real orbit determination therefore uses many more observations and fits them by least squares, where the residuals finally become a genuine test.</p>
+    </div>${bigMiss ? `
+    <div class="od-section">
+      <p class="od-note"><b>Why is this one off?</b> ${
+        sigma > 0
+          ? `Short-arc orbit determination is acutely sensitive to measurement error: a scatter of only ${sigma}″ is enough to swing the elements this far, because many different orbits thread three nearby points almost equally well. Lower σ to watch it tighten.`
+          : `A usable arc is squeezed between two opposite errors. Too <i>short</i> and the three sight-lines are nearly parallel, so triangulating the distances is ill-conditioned — the eighth-degree polynomial can even favour the wrong root. Too <i>long</i> and the truncated f and g series stops describing the motion. ${
+              odIsNearEarth(body)
+                ? `${body.nameZh} orbits close to Earth, which narrows that window badly.`
+                : ''
+            } Try other spacings for the three dates and watch the agreement swing.`
+      }</p>
+    </div>` : ''}
+    <div class="od-section">
+      <h3>Solver diagnostics</h3>
+      <div class="od-diag"><span>Converged</span><strong class="${r.converged ? 'mech-g' : ''}">${r.converged ? 'yes' : 'no (iteration cap)'}</strong></div>
+      <div class="od-diag"><span>Iterations</span><strong>${r.iterations}</strong></div>
+      <div class="od-diag"><span>r₂ · Sun distance at t₂</span><strong>${r.r2.toFixed(6)} AU</strong></div>
+      <div class="od-diag"><span>ρ₁, ρ₂, ρ₃ · Earth distances</span><strong>${r.ranges.map(x => x.toFixed(4)).join(', ')} AU</strong></div>
+      <div class="od-diag"><span>Roots of the octic</span><strong class="od-roots">${
+        (r.candidateRoots || []).map(x => Math.abs(x - r.r2) < 1e-6
+          ? `<span class="od-root-pick">${x.toFixed(4)}</span>` : x.toFixed(4)).join('  ·  ') || '—'
+      }</strong></div>
+      <p class="od-note">The eighth-degree polynomial can offer several positive real roots; the highlighted one is the branch that reproduces the observations. Physically impossible roots are discarded.</p>
+    </div>
+    <div class="od-section">
+      <h3>How it works</h3>
+      <p class="od-step"><b>①</b> An observation fixes only a <i>direction</i>, not a distance:</p>
+      <div class="formula-block sm">$$\\vec r_i = \\vec R_i + \\rho_i\\,\\hat\\rho_i$$</div>
+      <p class="od-step"><b>②</b> All three positions lie in one plane through the Sun, so they are linearly dependent:</p>
+      <div class="formula-block sm">$$c_1\\vec r_1 - \\vec r_2 + c_3\\vec r_3 = 0$$</div>
+      <p class="od-step"><b>③</b> Kepler's 2nd law lets those area ratios be approximated by <i>time</i> ratios — the step that breaks the deadlock:</p>
+      <div class="formula-block sm">$$c_1 \\approx \\tfrac{\\tau_3}{\\tau},\\qquad c_3 \\approx -\\tfrac{\\tau_1}{\\tau}$$</div>
+      <p class="od-step"><b>④</b> Eliminating the unknown ranges closes into an eighth-degree polynomial for the middle distance:</p>
+      <div class="formula-block sm">$$r_2^8 + a\\,r_2^6 + b\\,r_2^3 + c = 0$$</div>
+      <p class="od-step"><b>⑤</b> The f and g series then give the velocity, and <b>r</b>₂, <b>v</b>₂ convert to the six elements:</p>
+      <div class="formula-block sm">$$\\vec v_2 = \\frac{f_3\\vec r_1 - f_1\\vec r_3}{f_3g_1 - f_1g_3}$$</div>
+    </div>`;
+  renderMath(odResult);
+
+  // 4) Show it: the recovered ellipse only reads against the Solar System view.
+  drawRecoveredOrbit(r.elements, r.epochJd);
+  if (state.mode !== 'solar') setMode('solar');
+}
+
+document.getElementById('odBtn').onclick = () => {
+  if (!odInit) initOD();
+  eventsPanel.classList.remove('visible');
+  ephemPanel.classList.remove('visible');
+  odPanel.classList.toggle('visible');
+};
+document.getElementById('odClose').onclick = () => { odPanel.classList.remove('visible'); clearRecoveredOrbit(); };
+document.getElementById('odGo').onclick = runOD;
+
 updateSpeedLabel();
 rebuildChips();
 showInfo(SUN);
@@ -995,6 +1346,7 @@ function enterApp(mode) {
   landing.classList.add('hidden');
   setTimeout(() => { landing.style.display = 'none'; }, 800); // remove after fade-out
   if (mode === 'solar') startTour();   // cinematic fly-through on first entry
+  else maybeAutoShowHelp();            // no tour to wait for here, so the first-visit help can open now
 }
 document.getElementById('enterSolar').onclick = () => { enterApp('solar'); syncHash(); };
 document.getElementById('enterStars').onclick = () => { enterApp('stars'); syncHash(); };
@@ -1114,10 +1466,17 @@ function startTour() {
   tour = { start: performance.now(), dur: 17000 };
   if (tourHint) tourHint.classList.add('visible');
 }
-function endTour() {
+// `offerHelp` is true only when the tour ended on its own terms — it ran to the
+// end, or the visitor pressed Skip. Someone who grabbed the camera instead is
+// already exploring, so we don't interrupt that with the first-visit help; the
+// bottom hint and the ? button are still there whenever they want it.
+// NOTE: callers wired directly to DOM/controls events must wrap this, or the
+// Event object would arrive as a truthy `offerHelp`.
+function endTour(offerHelp = false) {
   if (!tour) return;
   tour = null;
   if (tourHint) tourHint.classList.remove('visible');
+  if (offerHelp) maybeAutoShowHelp();   // never overlaps the tour: it's over by here
 }
 function updateTour(now) {
   const p = Math.min(1, (now - tour.start) / tour.dur);
@@ -1127,14 +1486,16 @@ function updateTour(now) {
   const lt = smoothstep((p - a.t) / (b.t - a.t || 1));
   camera.position.copy(_twa.fromArray(a.pos).lerp(_twb.fromArray(b.pos), lt));
   controls.target.copy(_tla.fromArray(a.look).lerp(_tlb.fromArray(b.look), lt));
-  if (p >= 1) endTour();
+  if (p >= 1) endTour(true);   // watched it through — a good moment to orient them
 }
-// Any user gesture cancels the flight and returns full control.
-controls.addEventListener('start', endTour);
-renderer.domElement.addEventListener('pointerdown', endTour);
-renderer.domElement.addEventListener('wheel', endTour, { passive: true });
+// Any user gesture cancels the flight and returns full control. These are
+// wrapped so the Event object never lands in `offerHelp` (see endTour).
+controls.addEventListener('start', () => endTour());
+renderer.domElement.addEventListener('pointerdown', () => endTour());
+renderer.domElement.addEventListener('wheel', () => endTour(), { passive: true });
 const _tourSkip = document.getElementById('tourSkip');
-if (_tourSkip) _tourSkip.onclick = endTour;
+// Skipping means "spare me the flight, show me the thing" — orient them.
+if (_tourSkip) _tourSkip.onclick = () => endTour(true);
 
 // ---------------------------------------------------------------------------
 //  Label declutter — a screen-space pass that hides overlapping labels so text
