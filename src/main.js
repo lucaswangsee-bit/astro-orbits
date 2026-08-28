@@ -12,7 +12,7 @@ import {
   orbitalElements, GM_SUN
 } from './kepler.js';
 import { SUN, PLANETS, MOON, COMETS, ASTEROIDS } from './bodies.js';
-import { observeBody, determineOrbit, residuals, elementsToBody } from './gauss.js';
+import { observeBody, determineOrbit, residuals } from './gauss.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
 import { ORIGINS } from './origins.js';
@@ -70,7 +70,8 @@ camera.position.set(0, 120, 260);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
-controls.minDistance = 3;
+controls.minDistance = 2.2;   // just outside the Sun's radius (2.0), so you can
+                              // push right up to a small body without clipping it
 controls.maxDistance = 9000;
 
 const texLoader = new THREE.TextureLoader();
@@ -83,8 +84,12 @@ function loadTex(url) {
 // ---------------------------------------------------------------------------
 //  Lighting
 // ---------------------------------------------------------------------------
-scene.add(new THREE.AmbientLight(0xffffff, 0.22));
-const sunLight = new THREE.PointLight(0xffffff, 3.4, 0, 0.35);
+// Space has almost no fill light: nearly all of it comes from the Sun, so the
+// ambient term is kept low deliberately. That is what gives every body a real
+// day side and a genuinely dark night side with a crisp terminator between —
+// just enough ambient to keep the night side readable rather than pure black.
+scene.add(new THREE.AmbientLight(0xffffff, 0.07));
+const sunLight = new THREE.PointLight(0xffffff, 4.2, 0, 0.35);
 scene.add(sunLight);
 
 // ---------------------------------------------------------------------------
@@ -126,27 +131,102 @@ function makeLabel(text, className, offsetY) {
   return obj;
 }
 
+// Real axial tilts (obliquity to the orbit, degrees). These are what make Uranus
+// lie on its side and give Saturn's rings their familiar slant — and Venus is
+// past 90°, which is how a retrograde spin is expressed.
+const AXIAL_TILT = {
+  sun: 7.25, mercury: 0.03, venus: 177.36, earth: 23.44, mars: 25.19,
+  jupiter: 3.13, saturn: 26.73, uranus: 97.77, neptune: 28.32, moon: 6.68
+};
+// A thin shell of haze just above the surface, for the bodies that actually
+// have an atmosphere. Airless rock (Mercury, the Moon) deliberately gets none.
+const ATMOSPHERE = {
+  venus:   { color: 0xf5e3b0, opacity: 0.26, scale: 1.09 },
+  earth:   { color: 0x6fb6ff, opacity: 0.24, scale: 1.07 },
+  mars:    { color: 0xd8a17a, opacity: 0.11, scale: 1.05 },
+  jupiter: { color: 0xe8c9a0, opacity: 0.13, scale: 1.04 },
+  saturn:  { color: 0xe8d6a8, opacity: 0.12, scale: 1.04 },
+  uranus:  { color: 0x9fe6e2, opacity: 0.16, scale: 1.05 },
+  neptune: { color: 0x7f9cff, opacity: 0.17, scale: 1.05 }
+};
+
+// A body is built in two nested pieces so the axial tilt cannot drag the label
+// around with it:
+//   holder  — carries the orbital position, the label and the click identity
+//   spinner — carries the tilt, and is what spinBodies() rotates
+// Rotation order ZYX means the matrix is Rz(tilt)·Ry(spin): the planet turns
+// about its OWN axis, and that axis is the tilted one.
 function makeBody(data, emissive) {
-  const geo = new THREE.SphereGeometry(data.displaySize, 48, 48);
+  const holder = new THREE.Object3D();
+  holder.userData.body = data;
+
+  const spinner = new THREE.Object3D();
+  spinner.rotation.order = 'ZYX';
+  spinner.rotation.z = (AXIAL_TILT[data.key] || 0) * Math.PI / 180;
+  holder.userData.spinner = spinner;
+
   const map = data.texture ? loadTex(data.texture) : null;
   const mat = emissive
     ? new THREE.MeshBasicMaterial({ map, color: map ? 0xffffff : data.color })
-    : new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : data.color, roughness: 0.9, metalness: 0 });
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.userData.body = data;
-  mesh.add(makeLabel(data.nameZh, data.type === 'star' ? 'label-star' : 'label-planet', data.displaySize + 0.6));
-  solarGroup.add(mesh);
-  bodyMeshes[data.key] = mesh;
-  clickableBodies.push(mesh);
-  return mesh;
+    // Rock and cloud are rough and non-metallic; a touch of tilt in roughness
+    // keeps the terminator soft instead of a hard line.
+    : new THREE.MeshStandardMaterial({ map, color: map ? 0xffffff : data.color, roughness: 0.92, metalness: 0 });
+  spinner.add(new THREE.Mesh(new THREE.SphereGeometry(data.displaySize, 64, 48), mat));
+  holder.add(spinner);
+
+  const air = ATMOSPHERE[data.key];
+  if (air) {
+    holder.add(new THREE.Mesh(
+      new THREE.SphereGeometry(data.displaySize * air.scale, 40, 28),
+      new THREE.MeshBasicMaterial({
+        color: air.color, transparent: true, opacity: air.opacity,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide
+      })
+    ));
+  }
+
+  holder.add(makeLabel(data.nameZh, data.type === 'star' ? 'label-star' : 'label-planet', data.displaySize + 0.6));
+  solarGroup.add(holder);
+  bodyMeshes[data.key] = holder;
+  clickableBodies.push(holder);
+  return holder;
 }
 
-// Sun + glow halo
+// Minor bodies are not spheres — they are collision fragments, too small for
+// gravity to have rounded them. Pushing each vertex in and out along a few
+// overlapping sine lobes gives a believable battered rock. The displacement is
+// a pure function of the surface direction, so the duplicated seam and pole
+// vertices all move together and the mesh never cracks open.
+function lumpySphere(radius, seed, amount = 0.3) {
+  const geo = new THREE.SphereGeometry(radius, 32, 24);
+  const pos = geo.attributes.position, v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) {
+    v.fromBufferAttribute(pos, i).normalize();
+    const d = 1
+      + amount * 0.60 * Math.sin(v.x * 3.1 + seed) * Math.cos(v.y * 2.7 + seed * 1.7)
+      + amount * 0.40 * Math.sin(v.y * 5.3 + seed * 2.3) * Math.cos(v.z * 4.1 + seed)
+      + amount * 0.22 * Math.cos(v.z * 7.7 + seed * 3.1) * Math.sin(v.x * 6.3 + seed);
+    pos.setXYZ(i, v.x * radius * d, v.y * radius * d, v.z * radius * d);
+  }
+  pos.needsUpdate = true;
+  geo.computeVertexNormals();   // re-light the new facets
+  return geo;
+}
+// Stable per-body seed so a given rock always comes out the same shape.
+const keySeed = k => [...k].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 997, 7) / 40;
+
+// Sun: the photosphere plus a layered corona. Stacking three faint additive
+// shells falls off with distance far more like real glare than one flat halo.
 const sunMesh = makeBody(SUN, true);
-sunMesh.add(new THREE.Mesh(
-  new THREE.SphereGeometry(SUN.displaySize * 1.5, 32, 32),
-  new THREE.MeshBasicMaterial({ color: 0xffdd66, transparent: true, opacity: 0.13 })
-));
+for (const [scale, opacity] of [[1.35, 0.20], [1.9, 0.10], [3.0, 0.045]]) {
+  sunMesh.add(new THREE.Mesh(
+    new THREE.SphereGeometry(SUN.displaySize * scale, 32, 24),
+    new THREE.MeshBasicMaterial({
+      color: 0xffdd66, transparent: true, opacity,
+      blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide
+    })
+  ));
+}
 
 // Planets + rings
 for (const p of PLANETS) {
@@ -168,8 +248,11 @@ for (const p of PLANETS) {
       side: THREE.DoubleSide, transparent: true, opacity: p.key === 'saturn' ? 0.9 : 0.3
     });
     const ring = new THREE.Mesh(ringGeo, ringMat);
-    ring.rotation.x = Math.PI / 2 - 0.45;
-    bodyMeshes[p.key].add(ring);
+    // Rings sit in the planet's equatorial plane, so hanging them off the
+    // spinner makes them inherit the real axial tilt instead of a guessed one —
+    // which is exactly where Saturn's famous slant comes from.
+    ring.rotation.x = Math.PI / 2;
+    bodyMeshes[p.key].userData.spinner.add(ring);
   }
 }
 makeBody(MOON, false);
@@ -181,9 +264,16 @@ makeBody(MOON, false);
 const cometRigs = [];   // { data, mesh, ionTail, dustTail, orbitLine }
 const UP_Y = new THREE.Vector3(0, 1, 0);
 for (const c of COMETS) {
-  const geo = new THREE.SphereGeometry(c.displaySize, 24, 24);
-  const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: c.color }));
+  // A comet nucleus is an irregular, extremely dark lump of ice and dust —
+  // among the least reflective surfaces in the Solar System — so it is lit
+  // like rock rather than drawn as a glowing dot. The coma around it, though,
+  // really does shine, so that stays additive.
+  const mesh = new THREE.Mesh(
+    lumpySphere(c.displaySize, keySeed(c.key), 0.34),
+    new THREE.MeshStandardMaterial({ color: c.color, roughness: 1, metalness: 0 })
+  );
   mesh.userData.body = c;
+  mesh.userData.tumble = 2 * Math.PI / 0.35;   // rad/day — nuclei spin in hours
   // Coma halo around the icy nucleus
   mesh.add(new THREE.Mesh(
     new THREE.SphereGeometry(c.displaySize * 2.6, 16, 16),
@@ -227,15 +317,16 @@ for (const c of COMETS) {
 // ---------------------------------------------------------------------------
 const asteroidRigs = [];
 for (const c of ASTEROIDS) {
+  // Real minor planets are dark, battered rock. They are lit by the Sun like
+  // everything else here, so they show a proper day side and terminator instead
+  // of the self-luminous dot they used to be — and the glowing halo is gone,
+  // because rock does not glow.
   const mesh = new THREE.Mesh(
-    new THREE.SphereGeometry(c.displaySize, 20, 20),
-    new THREE.MeshBasicMaterial({ color: c.color })
+    lumpySphere(c.displaySize, keySeed(c.key), 0.3),
+    new THREE.MeshStandardMaterial({ color: c.color, roughness: 1, metalness: 0 })
   );
   mesh.userData.body = c;
-  mesh.add(new THREE.Mesh(   // faint halo so small bodies stay visible
-    new THREE.SphereGeometry(c.displaySize * 2.2, 12, 12),
-    new THREE.MeshBasicMaterial({ color: c.color, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false })
-  ));
+  mesh.userData.tumble = 2 * Math.PI / 0.4;   // rad/day — most asteroids turn in hours
   mesh.add(makeLabel(c.nameZh, 'label-asteroid', c.displaySize + 0.7));
   solarGroup.add(mesh);
   bodyMeshes[c.key] = mesh;
@@ -488,8 +579,15 @@ function placeTail(tail, origin, dir, len, quat) {
 }
 function spinBodies(dtDays) {
   for (const key in bodyMeshes) {
-    const b = bodyMeshes[key].userData.body;
-    if (b.spinHours) bodyMeshes[key].rotation.y += (dtDays * 24 / b.spinHours) * 2 * Math.PI;
+    const holder = bodyMeshes[key];
+    const b = holder.userData.body;
+    // Turn the tilted inner frame, not the holder — the holder carries the
+    // label, which must stay upright above the body.
+    const spinner = holder.userData.spinner;
+    if (b.spinHours && spinner) spinner.rotation.y += (dtDays * 24 / b.spinHours) * 2 * Math.PI;
+    // Minor bodies have no tilt frame; they tumble about their own Y, which
+    // leaves their label (sitting on that axis) untouched.
+    else if (holder.userData.tumble) holder.rotation.y += holder.userData.tumble * dtDays;
   }
 }
 
@@ -794,6 +892,17 @@ const speedSlider = document.getElementById('speed');
 const playBtn = document.getElementById('playBtn');
 const timeControls = document.getElementById('timeControls');
 const bodyListEl = document.getElementById('bodyList');
+const chipSearch = document.getElementById('chipSearch');
+const chipEmpty = document.getElementById('chipEmpty');
+chipSearch.addEventListener('input', filterChips);
+// Esc inside the box clears the filter rather than closing panels around it —
+// stop the event before the global shortcut handler sees it.
+chipSearch.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  if (chipSearch.value) { chipSearch.value = ''; filterChips(); }
+  else chipSearch.blur();
+});
 
 const fmtDate = d => d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 const SPEED_MIN = -200, SPEED_MAX = 200;   // slider range; the input box may exceed it
@@ -904,21 +1013,50 @@ function rebuildChips() {
       ]
     : [{ label: 'Nearby stars', items: starData }];
 
+  // Each family gets its own wrapper so the search filter can hide a heading and
+  // its chips together, instead of leaving an orphaned label behind.
   for (const g of groups) {
     if (!g.items.length) continue;
+    const wrap = document.createElement('div');
+    wrap.className = 'chip-group-wrap';
     const head = document.createElement('div');
     head.className = 'chip-group';
     head.textContent = g.label;
-    bodyListEl.appendChild(head);
+    wrap.appendChild(head);
+    const row = document.createElement('div');
+    row.className = 'chip-row';
     for (const b of g.items) {
       const color = (b.color || 0xffffff).toString(16).padStart(6, '0');
       const btn = document.createElement('button');
       btn.className = 'body-chip';
       btn.innerHTML = `<span class="dot" style="background:#${color}"></span>${b.nameZh}`;
+      // Match on both names so "Halley" and "1P" style queries both land.
+      btn.dataset.search = `${b.nameZh} ${b.nameEn || ''}`.toLowerCase();
       btn.onclick = () => selectObject(b);
-      bodyListEl.appendChild(btn);
+      row.appendChild(btn);
     }
+    wrap.appendChild(row);
+    bodyListEl.appendChild(wrap);
   }
+  filterChips();   // a rebuild (mode switch) re-applies whatever is typed
+}
+
+// Show only the chips whose name contains the query, folding away any family
+// left with nothing to show.
+function filterChips() {
+  const q = (chipSearch.value || '').trim().toLowerCase();
+  let shown = 0;
+  for (const wrap of bodyListEl.querySelectorAll('.chip-group-wrap')) {
+    let hits = 0;
+    for (const chip of wrap.querySelectorAll('.body-chip')) {
+      const match = !q || chip.dataset.search.includes(q);
+      chip.hidden = !match;
+      if (match) hits++;
+    }
+    wrap.hidden = hits === 0;
+    shown += hits;
+  }
+  chipEmpty.hidden = shown > 0;
 }
 
 // Mode switching
@@ -1589,7 +1727,11 @@ function animate() {
     const target = focusTarget.getWorldPosition(new THREE.Vector3());
     controls.target.lerp(target, 0.08);
     const size = focusTarget.userData.body ? focusTarget.userData.body.displaySize : (focusTarget.userData.star.size || 1);
-    const desired = target.clone().add(new THREE.Vector3(0, size * 6 + 6, size * 10 + 16));
+    // Frame every body at roughly the same apparent size. The old formula added
+    // a fixed +16, which swamped the small bodies — fly to an asteroid and it
+    // stayed a dot. Scaling purely with the radius shows a rock's actual shape.
+    const d = Math.max(3.2, size * 13);
+    const desired = target.clone().add(new THREE.Vector3(0, d * 0.38, d));
     camera.position.lerp(desired, 0.06);
     if (camera.position.distanceTo(desired) < 1) focusTarget = null;
   }
