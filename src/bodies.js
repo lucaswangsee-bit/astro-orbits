@@ -288,6 +288,7 @@ export const COMETS = [
   {
     key: 'halley', nameZh: 'Halley', nameEn: "1P/Halley", type: 'comet',
     color: 0x8ff0e0, displaySize: 0.12,
+    texture: 'assets/textures/2k_rock_nucleus.jpg', textureReal: false, textureCredit: 'Giotto glimpsed the nucleus only in part',
     a: 17.834, e: 0.96714, I: 162.262, argp: 111.332, node: 58.42,
     tperi: 2446470.96, period: 27510,   // last perihelion 1986-02-09, P ≈ 75.3 yr
     facts: {
@@ -310,6 +311,7 @@ export const COMETS = [
   {
     key: 'encke', nameZh: 'Encke', nameEn: '2P/Encke', type: 'comet',
     color: 0xa8f0c0, displaySize: 0.10,
+    texture: 'assets/textures/2k_rock_nucleus.jpg', textureReal: false, textureCredit: 'the nucleus has never been resolved',
     a: 2.2155, e: 0.8483, I: 11.78, argp: 186.55, node: 334.57,
     tperi: 2460239.5, period: 1204,     // perihelion 2023-10-22, P ≈ 3.3 yr
     facts: {
@@ -338,6 +340,7 @@ export const ASTEROIDS = [
   {
     key: 'ceres', nameZh: 'Ceres', nameEn: '1 Ceres', type: 'asteroid',
     color: 0xb9ad9c, displaySize: 0.55,
+    texture: 'assets/textures/2k_ceres.jpg', textureReal: true, textureCredit: 'NASA/JPL-Caltech/UCLA/MPS/DLR/IDA — Dawn global map',
     a: 2.765552595034094, e: 0.07969229514816586, I: 10.58802780183462,
     argp: 73.29421453021587, node: 80.24862682043221,
     tperi: 2461599.841466614066, period: 1679.853119758983,
@@ -358,6 +361,7 @@ export const ASTEROIDS = [
   {
     key: 'vesta', nameZh: 'Vesta', nameEn: '4 Vesta', type: 'asteroid',
     color: 0xe0d6a8, displaySize: 0.46,
+    texture: 'assets/textures/2k_rock_asteroid.jpg', textureReal: false, textureCredit: 'no natural-colour global map has been published',
     a: 2.361365965127599, e: 0.09020374382834395, I: 7.143925545058711,
     argp: 151.4686478221564, node: 103.701293265032,
     tperi: 2460901.587379842988, period: 1325.389042911101,
@@ -377,6 +381,7 @@ export const ASTEROIDS = [
   {
     key: 'pallas', nameZh: 'Pallas', nameEn: '2 Pallas', type: 'asteroid',
     color: 0x9fb4bf, displaySize: 0.44,
+    texture: 'assets/textures/2k_rock_asteroid.jpg', textureReal: false, textureCredit: 'never visited by a spacecraft',
     a: 2.769559010737709, e: 0.2307000995648547, I: 34.93279321851542,
     argp: 310.9699161652136, node: 172.8866193357694,
     tperi: 2461695.031164382680, period: 1683.504809564834,
@@ -396,6 +401,7 @@ export const ASTEROIDS = [
   {
     key: 'eros', nameZh: 'Eros', nameEn: '433 Eros', type: 'asteroid',
     color: 0xc79366, displaySize: 0.30,
+    texture: 'assets/textures/2k_rock_asteroid.jpg', textureReal: false, textureCredit: 'NEAR orbited it, but no public colour map exists',
     a: 1.458243716760167, e: 0.2228779627700761, I: 10.82854410314273,
     argp: 178.9181319135911, node: 304.2679713350896,
     tperi: 2461088.813494039683, period: 643.1963890927677,
@@ -415,6 +421,7 @@ export const ASTEROIDS = [
   {
     key: 'apophis', nameZh: 'Apophis', nameEn: '99942 Apophis', type: 'asteroid',
     color: 0xd98f5e, displaySize: 0.26,
+    texture: 'assets/textures/2k_rock_asteroid.jpg', textureReal: false, textureCredit: 'never visited by a spacecraft',
     a: 0.9223592206975018, e: 0.1911492279663492, I: 3.340996879880978,
     argp: 126.6795706895841, node: 203.8936514240762,
     tperi: 2461042.919201488142, period: 323.5553366891694,
@@ -434,6 +441,7 @@ export const ASTEROIDS = [
   {
     key: 'bennu', nameZh: 'Bennu', nameEn: '101955 Bennu', type: 'asteroid',
     color: 0x7a7d82, displaySize: 0.26,
+    texture: 'assets/textures/2k_bennu.jpg', textureReal: true, textureCredit: 'NASA/Goddard/University of Arizona — OSIRIS-REx global mosaic',
     a: 1.126391025894812, e: 0.2037450762416414, I: 6.03494377024794,
     argp: 66.22306084084298, node: 2.06086619569642,
     tperi: 2455439.141940872670, period: 436.6487281120201,

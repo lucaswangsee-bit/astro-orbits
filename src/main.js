@@ -270,7 +270,10 @@ for (const c of COMETS) {
   // really does shine, so that stays additive.
   const mesh = new THREE.Mesh(
     lumpySphere(c.displaySize, keySeed(c.key), 0.34),
-    new THREE.MeshStandardMaterial({ color: c.color, roughness: 1, metalness: 0 })
+    new THREE.MeshStandardMaterial({
+      map: c.texture ? loadTex(c.texture) : null,
+      color: c.color, roughness: 1, metalness: 0
+    })
   );
   mesh.userData.body = c;
   mesh.userData.tumble = 2 * Math.PI / 0.35;   // rad/day — nuclei spin in hours
@@ -323,7 +326,12 @@ for (const c of ASTEROIDS) {
   // because rock does not glow.
   const mesh = new THREE.Mesh(
     lumpySphere(c.displaySize, keySeed(c.key), 0.3),
-    new THREE.MeshStandardMaterial({ color: c.color, roughness: 1, metalness: 0 })
+    new THREE.MeshStandardMaterial({
+      // Ceres and Bennu carry genuine mission maps; the rest wear a
+      // representative regolith (see textureReal / textureCredit in bodies.js).
+      map: c.texture ? loadTex(c.texture) : null,
+      color: c.color, roughness: 1, metalness: 0
+    })
   );
   mesh.userData.body = c;
   mesh.userData.tumble = 2 * Math.PI / 0.4;   // rad/day — most asteroids turn in hours
@@ -624,6 +632,13 @@ function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMes
 function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  // Say plainly whether the surface you are looking at is real mission imagery
+  // or a stand-in. Several of these worlds have simply never been mapped.
+  const surfaceRow = data.textureCredit
+    ? `<tr><td>Surface map</td><td>${data.textureReal
+        ? '<span class="mech-g">Real mission data</span>'
+        : '<span class="lp-unbound">Representative</span>'} — ${data.textureCredit}</td></tr>`
+    : '';
   const highlights = data.highlights.map(h => `<li>${h}</li>`).join('');
   infoTitle.textContent = data.nameZh;   // the bar keeps naming it while folded
   infoBody.innerHTML = `
@@ -647,7 +662,7 @@ function showInfo(data) {
       <tr><td>→ Orbit it would give</td><td><span id="lpCalc" class="lp-val">—</span></td></tr>
     </table>` : ''}
     <h3>Notable features</h3><ul class="highlights">${highlights}</ul>
-    <h3>Key data</h3><table class="facts">${facts}</table>
+    <h3>Key data</h3><table class="facts">${facts}${surfaceRow}</table>
     ${data.mechanics ? `
     <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
   infoEl.classList.add('visible');
@@ -1730,7 +1745,7 @@ function animate() {
     // Frame every body at roughly the same apparent size. The old formula added
     // a fixed +16, which swamped the small bodies — fly to an asteroid and it
     // stayed a dot. Scaling purely with the radius shows a rock's actual shape.
-    const d = Math.max(3.2, size * 13);
+    const d = Math.max(2.6, size * 8);
     const desired = target.clone().add(new THREE.Vector3(0, d * 0.38, d));
     camera.position.lerp(desired, 0.06);
     if (camera.position.distanceTo(desired) < 1) focusTarget = null;
