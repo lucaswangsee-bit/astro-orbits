@@ -224,6 +224,40 @@ html, body {
 
 .blurb { font-size: 13px; line-height: 1.7; color: #c7d2ec; margin: 4px 0 14px; }
 
+/* ---- Two-layer body view: the surface you see / the structure inside ---- */
+.view-toggle {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+  background: rgba(255, 255, 255, 0.05); border: 1px solid var(--panel-border);
+  border-radius: 10px; padding: 3px; margin: 2px 0 14px;
+}
+.view-toggle .vt {
+  background: none; border: none; border-radius: 7px; cursor: pointer;
+  color: var(--text-dim); font: inherit; font-size: 12px; padding: 6px 8px;
+  transition: background 0.15s, color 0.15s;
+}
+.view-toggle .vt:hover { color: var(--text); }
+.view-toggle .vt.active { background: rgba(110, 168, 255, 0.26); color: var(--text); font-weight: 600; }
+[hidden] { display: none !important; }   /* the panel toggles blocks by attribute */
+
+/* Internal-structure table: a colour key that matches the 3D cutaway. */
+.layer-table td { padding: 7px 0; vertical-align: top; }
+.layer-table td:first-child { width: 42%; color: var(--text); }
+.layer-dot {
+  display: inline-block; width: 10px; height: 10px; border-radius: 3px;
+  margin-right: 7px; vertical-align: middle;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
+}
+.layer-note { font-size: 11.5px; line-height: 1.55; color: var(--text-dim); margin-top: 3px; }
+
+/* Atmosphere: a proportional bar so the mix reads at a glance. */
+.air-table td:first-child { width: 40%; }
+.air-bar {
+  display: inline-block; width: 52%; height: 7px; vertical-align: middle;
+  background: rgba(255, 255, 255, 0.08); border-radius: 4px; overflow: hidden;
+}
+.air-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.air-pct { font-size: 11.5px; color: var(--text-dim); margin-left: 8px; font-variant-numeric: tabular-nums; }
+
 #info h3 {
   font-size: 13px; color: var(--accent);
   margin: 14px 0 8px; padding-bottom: 4px;

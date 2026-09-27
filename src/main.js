@@ -16,6 +16,7 @@ import { observeBody, determineOrbit, residuals } from './gauss.js';
 import { STARS, starPositionLy, starVisual } from './stars.js';
 import { computeEvents } from './events.js';
 import { ORIGINS } from './origins.js';
+import { INTERIORS } from './interiors.js';
 
 const SCALE = 20;        // Solar System: scene units per AU (real distances)
 const SCALE_C = 26;      // Compact mode: reference scale for the √-compressed radius
@@ -176,13 +177,14 @@ function makeBody(data, emissive) {
 
   const air = ATMOSPHERE[data.key];
   if (air) {
-    holder.add(new THREE.Mesh(
+    holder.userData.air = new THREE.Mesh(
       new THREE.SphereGeometry(data.displaySize * air.scale, 40, 28),
       new THREE.MeshBasicMaterial({
         color: air.color, transparent: true, opacity: air.opacity,
         blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide
       })
-    ));
+    );
+    holder.add(holder.userData.air);
   }
 
   holder.add(makeLabel(data.nameZh, data.type === 'star' ? 'label-star' : 'label-planet', data.displaySize + 0.6));
@@ -190,6 +192,62 @@ function makeBody(data, emissive) {
   bodyMeshes[data.key] = holder;
   clickableBodies.push(holder);
   return holder;
+}
+
+// ---------------------------------------------------------------------------
+//  Interior view — the second layer. The body is replaced by a cutaway: half of
+//  the real textured shell, with the internal shells drawn as concentric discs
+//  across the exposed face, at their true radius fractions.
+//
+//  The shell is built over z ≤ 0 (phi from π to 2π) so the cut face at z = 0
+//  looks toward +z — which is exactly where focusOn() parks the camera.
+// ---------------------------------------------------------------------------
+let interiorKey = null;   // the body currently opened up, if any
+
+function buildCutaway(data) {
+  const info = INTERIORS[data.key];
+  if (!info) return null;
+  const R = data.displaySize, g = new THREE.Group();
+
+  const map = data.texture ? loadTex(data.texture) : null;
+  g.add(new THREE.Mesh(
+    new THREE.SphereGeometry(R, 56, 40, Math.PI, Math.PI),
+    new THREE.MeshStandardMaterial({
+      map, color: map ? 0xffffff : data.color,
+      roughness: 0.92, metalness: 0, side: THREE.DoubleSide
+    })
+  ));
+
+  // Painted outermost first; each smaller disc sits a hair nearer the camera so
+  // they stack into clean concentric rings instead of z-fighting.
+  info.layers.forEach((L, i) => {
+    const disc = new THREE.Mesh(
+      new THREE.CircleGeometry(R * L.to, 72),
+      new THREE.MeshBasicMaterial({ color: L.color, side: THREE.DoubleSide })
+    );
+    disc.position.z = R * 0.0012 * (i + 1);
+    g.add(disc);
+  });
+  return g;
+}
+
+// Swap a body between its visible surface and its cutaway. Only one body is
+// ever opened at a time, so switching bodies closes the previous one.
+function setBodyView(key, view) {
+  if (interiorKey && interiorKey !== key) setBodyView(interiorKey, 'surface');
+  const holder = bodyMeshes[key];
+  if (!holder || !holder.userData.spinner) return;
+  const wantInterior = view === 'interior' && INTERIORS[key];
+  if (wantInterior && !holder.userData.cutaway) {
+    const cut = buildCutaway(holder.userData.body);
+    if (!cut) return;
+    holder.userData.cutaway = cut;
+    holder.add(cut);
+  }
+  holder.userData.spinner.visible = !wantInterior;
+  if (holder.userData.air) holder.userData.air.visible = !wantInterior;
+  if (holder.userData.cutaway) holder.userData.cutaway.visible = !!wantInterior;
+  interiorKey = wantInterior ? key : null;
 }
 
 // Minor bodies are not spheres — they are collision fragments, too small for
@@ -629,6 +687,41 @@ function typeName(obj) {
   return { star: 'Star', planet: 'Planet', moon: 'Moon', comet: 'Comet', asteroid: 'Asteroid' }[obj.type] || obj.type;
 }
 function selectObject(obj) { state.selectedKey = obj.key; followTarget = bodyMeshes[obj.key] || null; showInfo(obj); focusOn(obj.key); syncHash(); }
+// The interior read-out that pairs with the 3D cutaway: every shell with its
+// real thickness, and what the air above it is actually made of.
+function interiorHTML(data) {
+  const info = INTERIORS[data.key];
+  if (!info) return '';
+  const L = info.layers;
+  const rows = L.map((s, i) => {
+    const innerFrac = i + 1 < L.length ? L[i + 1].to : 0;
+    const thick = Math.round((s.to - innerFrac) * info.radiusKm);
+    // Quote the range as depth below the surface — the way interiors are
+    // normally described, and it never collapses the way rounded percentages do.
+    const top = Math.round((1 - s.to) * info.radiusKm);
+    const bottom = Math.round((1 - innerFrac) * info.radiusKm);
+    const swatch = `<span class="layer-dot" style="background:#${s.color.toString(16).padStart(6, '0')}"></span>`;
+    return `<tr><td>${swatch}${s.name}</td><td><b>${thick.toLocaleString()} km thick</b>
+      <span class="lp-cmp">${top.toLocaleString()}–${bottom.toLocaleString()} km deep</span>
+      <div class="layer-note">${s.note}</div></td></tr>`;
+  }).join('');
+
+  const air = info.air.length ? `
+    <h3>Atmosphere</h3>
+    <table class="facts air-table">${info.air.map(([n, pct]) => `
+      <tr><td>${n}</td><td><span class="air-bar"><i style="width:${Math.max(1.5, pct)}%"></i></span>
+      <span class="air-pct">${pct}%</span></td></tr>`).join('')}</table>
+    <p class="od-note">${info.airNote}</p>
+    <table class="facts"><tr><td>Pressure</td><td>${info.pressure}</td></tr></table>`
+    : `<h3>Atmosphere</h3><p class="od-note">${info.airNote}</p>`;
+
+  return `
+    <h3>Internal structure</h3>
+    <p class="od-note">Mean radius ${info.radiusKm.toLocaleString()} km. Shells listed from the outside in — the cutaway in the scene is drawn to these same proportions.</p>
+    <table class="facts layer-table">${rows}</table>
+    ${air}`;
+}
+
 function showInfo(data) {
   const color = (data.color || 0xffffff).toString(16).padStart(6, '0');
   const facts = Object.entries(data.facts).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
@@ -647,6 +740,13 @@ function showInfo(data) {
       <div><h2>${data.nameZh} <small>${data.nameEn}</small></h2>
       <span class="tag">${typeName(data)}</span></div>
     </div>
+    ${INTERIORS[data.key] ? `
+    <div class="view-toggle" id="viewToggle">
+      <button class="vt active" data-view="surface">Surface</button>
+      <button class="vt" data-view="interior">Interior</button>
+    </div>` : ''}
+    <div id="viewInterior" hidden>${interiorHTML(data)}</div>
+    <div id="viewSurface">
     <p class="blurb">${data.blurb}</p>
     ${data.type === 'planet' ? `
     <h3>Live physics · Vis-viva</h3>
@@ -664,10 +764,26 @@ function showInfo(data) {
     <h3>Notable features</h3><ul class="highlights">${highlights}</ul>
     <h3>Key data</h3><table class="facts">${facts}${surfaceRow}</table>
     ${data.mechanics ? `
-    <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}`;
+    <button class="derive-btn" id="deriveBtn">🔬 ${isStar(data) ? 'Position' : 'Orbit'} &amp; gravity derivation →</button>` : ''}
+    </div>`;
   infoEl.classList.add('visible');
   infoEl.classList.remove('collapsed');   // a fresh selection always opens up
   renderMath(infoBody);
+
+  // Two-layer view. A fresh selection always opens on the surface; the toggle
+  // swaps both the panel content and the body in the scene together.
+  setBodyView(data.key, 'surface');
+  const vt = document.getElementById('viewToggle');
+  if (vt) vt.onclick = e => {
+    const btn = e.target.closest('.vt');
+    if (!btn) return;
+    const view = btn.dataset.view;
+    vt.querySelectorAll('.vt').forEach(b => b.classList.toggle('active', b === btn));
+    document.getElementById('viewSurface').hidden = (view === 'interior');
+    document.getElementById('viewInterior').hidden = (view !== 'interior');
+    setBodyView(data.key, view);
+  };
+
   const db = document.getElementById('deriveBtn');
   if (db) db.onclick = () => openDerivation(data);
 
@@ -1122,6 +1238,7 @@ function setMode(m) {
   focusTarget = null;
   followTarget = null;
   state.selectedKey = null;
+  if (interiorKey) setBodyView(interiorKey, 'surface');   // never leave a body cut open
   controls.target.set(0, 0, 0);
   camera.position.set(0, m === 'solar' ? 120 : 260, m === 'solar' ? 260 : 620);
   rebuildChips();
